@@ -1,0 +1,57 @@
+language: python
+
+sudo: false
+
+cache: pip
+
+matrix:
+  include:
+    - python: 2.7
+      env:
+        - COVERAGE=false
+        - TESTERS="pytest"
+        - ARGS="--verbose"
+    - python: 3.4
+      env:
+        - COVERAGE=false
+        - TESTERS="pytest"
+        - ARGS="--verbose"
+    - python: 3.5
+      env:
+        - COVERAGE=true
+        - TESTERS="pytest coverage"
+        - ARGS="--verbose"
+    - python: 3.6
+      env:
+        - COVERAGE=false
+        - TESTERS="pytest coverage"
+        - ARGS="--verbose"
+
+# Install, update, and setup Miniconda
+# This should not need changing.
+before_install:
+  - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
+  - chmod +x miniconda.sh
+  - ./miniconda.sh -b -p $HOME/miniconda
+  - export PATH="$HOME/miniconda/bin:$PATH"
+  - conda update --yes conda
+  - conda install --yes nomkl
+
+# We just set up a conda environment with the right Python version.
+# This should not need changing.
+install:
+  - conda create --yes -n test python=$TRAVIS_PYTHON_VERSION numpy pandas
+  - source activate test
+  - conda install --yes --channel=conda-forge ${TESTERS} networkx=1.11
+  - pip install codecov
+  - pip install .
+
+script:
+  - python check_swmmnetwork.py ${ARGS}
+
+after_success:
+  - if [ ${COVERAGE} = true ]; then
+      coverage run --source swmmnetwork check_swmmnetwork.py;
+      coverage report -m;
+      codecov;
+    fi

@@ -1,0 +1,13 @@
+name: swmmnetwork
+channels:
+- conda-forge
+- defaults
+dependencies:
+- networkx=1.11=py35_0
+- numpy=1.13.1=py35_0
+- pandas=0.20.3=py35_0
+- python=3.5.4=0
+- pydotplus=2.0.2=py35_0
+- matplotlib=2.0.2=np113py35_0
+- pytest=3.2.1=py35_0
+- pytest-cov=2.3.1=py35_0
