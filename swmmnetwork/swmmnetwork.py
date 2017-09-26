@@ -107,7 +107,7 @@ class SwmmNetwork(nx.MultiDiGraph):
 
 
     def __init__(self,
-                 *args,
+                 data=None,
                  nodes=[],
                  edges=[],
                  treated=True,
