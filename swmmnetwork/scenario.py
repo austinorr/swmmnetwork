@@ -91,7 +91,7 @@ class Scenario(object):
             e = 'Only standard units supported.'
             raise(ValueError(e))
 
-        # initialize properties 
+        # initialize properties
         self._pollutant_to_vol = None
         self._intermediate_link_volume = None
         self._subcatchments = None
@@ -104,13 +104,13 @@ class Scenario(object):
 
     def calculate_loading(self):
         if self._load is None:
-            # TODO: WIP 
+            # TODO: WIP
             self._load = self.raw_concentration.mul(self.rpt
                                                .subcatchment_runoff_results
                                                .Total_Runoff_mgal, axis='index')
 
         elif self._concentration is None:
-            # TODO: WIP 
+            # TODO: WIP
             self._concentration = self.raw_load.div(self.rpt
                                                .subcatchment_runoff_results
                                                .Total_Runoff_mgal, axis='index')
@@ -273,8 +273,8 @@ class Scenario(object):
     def plot_positions(self):
         return (self.inp
                     .coordinates.astype(float)
-                    .append(inp.polygons.astype(float)
-                               .groupby(inp.polygons.index)
+                    .append(self.inp.polygons.astype(float)
+                               .groupby(self.inp.polygons.index)
                                .mean())
                     .T
                     .to_dict('list')

@@ -120,7 +120,7 @@ class SwmmNetwork(nx.MultiDiGraph):
                  bmp_type_mapping={},
                  **kwargs
                 ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
 
         self.name_col = name_col
         self.vol_col = vol_col
