@@ -1,6 +1,11 @@
 import numpy
 import pandas
+from .unit_conversions import convert_units, KNOWN_CONVERSIONS
 
+try:
+    from hymo import SWMMInpFile, SWMMReportFile
+except ImportError:
+    pass
 
 def assignrename(df, xtype, volcol):
     return df.assign(xtype=xtype).rename(columns={volcol: 'volume'})
@@ -8,17 +13,36 @@ def assignrename(df, xtype, volcol):
 
 class ScenarioHydro(object):
 
-    def __init__(self, inp, rpt):
+    def __init__(self, swmm_inp_path, swmm_rpt_path, proxycol='Pollutant_lbs',
+                 vol_units_output=None, converters=None):
         """
-        inp: swmmreport.InpFile().
-        rpt: swmmreport.ReportFile().
+        Parameters
+        ----------
+        inp : filepath
+        rpt : filepath
+        proxycol : string, optional (default='Pollutant_lbs')
+        vol_units_output : string, optional (default=None)
+            specify desired output units for volume. Default is `None`
+            which will produce output in the same units as the SWMM5.1 files.
+        converters : list of tuples, optional (default=None)
+            specify list of tuples ordered 'from', 'to', 'factor', like
+            [("mgal", "acre-ft", 1 / 0.325851),]. each conversion is
+            performed as follows: from * factor = to
+
+        Attributes
+        ----------
+        allnodes :
+        alledges :
         """
 
         # import hydrology
-        self.inp = inp
-        self.rpt = rpt
+        self.inp = SWMMInpFile(swmm_inp_path)
+        self.rpt = SWMMReportFile(swmm_rpt_path)
+        self.proxycol = proxycol
+        self.vol_units_output=vol_units_output
+        self.converters=converters
 
-        self.flow_unit = (rpt.orig_file[rpt.find_line_num('Flow Units')]
+        self.flow_unit = (self.rpt.orig_file[self.rpt.find_line_num('Flow Units')]
                              .split('.')
                              .pop(-1)
                              .strip()
@@ -28,16 +52,15 @@ class ScenarioHydro(object):
         if self.flow_unit == 'CFS':
             self.subcatchment_volcol = 'Total_Runoff_mgal'
             self.node_volcol = 'Total_Inflow_Volume_mgals'
-            self.outfall_volcol = 'Total_Volume_mgal'
-            self.proxycol = 'Pollutant_lbs'
+            self.outfall_volcol = 'Total_Volume_10_6_gal'
             self.vol_unit = 'mgal'
         else:
             e = 'Only standard units supported.'
             raise(ValueError(e))
 
         # import link volume tracking proxy pollutant
-        self.proxy_conc_unit = inp.pollutants.Units.values[0]
-        self.proxy_pollutant_conc = float(inp.pollutants.Crain.values[0])
+        self.proxy_conc_unit = self.inp.pollutants.Units.values[0]
+        self.proxy_pollutant_conc = float(self.inp.pollutants.Crain.values[0])
 
         # initialize properties
         self._pollutant_to_vol = None
@@ -56,7 +79,7 @@ class ScenarioHydro(object):
         self._alledges = None
         self._allnodes = None
 
-    def conversion_factor(self, flowunit, concunit):
+    def proxy_conc_conversion_factor(self, flowunit, concunit):
         ug_to_mg = 1 / 1000
         mg_to_lbs = 1 / 453592
         l_to_gal = 1 / 3.78541
@@ -77,7 +100,7 @@ class ScenarioHydro(object):
     @property
     def pollutant_to_vol(self):
         if self._pollutant_to_vol is None:
-            conversion = self.conversion_factor(
+            conversion = self.proxy_conc_conversion_factor(
                 self.flow_unit, self.proxy_conc_unit)
             self._pollutant_to_vol = (conversion / self.proxy_pollutant_conc)
         return self._pollutant_to_vol
@@ -194,7 +217,7 @@ class ScenarioHydro(object):
         return self._conduits
 
     @property
-    def alledges(self):
+    def all_edges(self):
         """
         This is a ScenarioLoading endpoint.
         """
@@ -209,7 +232,7 @@ class ScenarioHydro(object):
         return self._alledges
 
     @property
-    def allnodes(self):
+    def all_nodes(self):
         """
         This is a ScenarioLoading endpoint.
         """
@@ -227,7 +250,7 @@ class ScenarioHydro(object):
     @property
     def plot_positions(self):
         """
-        This is a SwmmNetwork plotting endpoint. 
+        This is a SwmmNetwork plotting endpoint.
         """
         return (self.inp
                     .coordinates.astype(float)
@@ -247,36 +270,40 @@ class ScenarioLoading(object):
                  volume_val_col='volume', vol_unit_col='unit',
                  inlet_col='inlet_node', outlet_col='outlet_node'):
         """
-        - nodes_df: pandas.DataFrame, contains 'xtype_col',
-            'volume_val_col', 'vol_unit_col', and an 'index'
-            containing the node names.
-        - edges_df: pandas.DataFrame, contains 'xtype_col',
-            'volume_val_col', 'vol_unit_col', 'inlet_col',
-            'outlet_col', and an index containing the link names.
-        - load: pandas.DataFrame (default=None), containing 'wq_value_col',
-            'subcatchment_col', 'pollutant_col', and 'wq_unit_col'.
-        - conc: pandas.DataFrame (default=None), containing 'wq_value_col',
-            'subcatchment_col', 'pollutant_col', and 'wq_unit_col'.
-        - pocs: list like or string (default='all'), names of
-            the pollutants of concern.
-        - wq_value_col: string (default=None), name of the column that
-            contains the wq values in load/conc.
-        - subcatchment_col: string (default='subcatchment'), name of the
-            column that contains the subcatchment names in in load/conc.
-        - pollutant_col: string (default='pollutant'), name of the column
-            that contains the pollutant names in load/conc.
-        - wq_unit_col: string (default='unit'), name of the column that contains
-            the units of pollutants in load/conc.
-        - xtype_col: string (default='xtype'), name of the column that contains
-            the node/link type in the nodes_df/edges_df.
-        - volume_val_col: string (default='volume'), name of the column that
-            contains the volume values in the nodes_df/edges_df.
-        - vol_unit_col: string (default='unit'), name of the column that
-            contains the volume units in the nodes_df/edges_df.
-        - inlet_col: string (default='inlet_node'), name of the column that
-            contains the inlet in edges_df.
-        - outlet_col: string (default='outlet_node'), name of the column
-            that contains the outlet in edges_df.
+        Parameters
+        ----------
+        nodes_df : pandas.DataFrame
+            contains 'xtype_col', 'volume_val_col', 'vol_unit_col',
+            and an 'index' containing the node names.
+        edges_df : pandas.DataFrame
+            contains 'xtype_col', 'volume_val_col', 'vol_unit_col',
+            'inlet_col', 'outlet_col', and an index containing the link names.
+        load: pandas.DataFrame, optional (default=None)
+            containing 'wq_value_col', 'subcatchment_col', 'pollutant_col',
+            and 'wq_unit_col'.
+        conc: pandas.DataFrame, optional (default=None)
+            containing 'wq_value_col', 'subcatchment_col', 'pollutant_col',
+            and 'wq_unit_col'.
+        pocs: list like or string, optional (default='all')
+            names of the pollutants of concern.
+        wq_value_col: string, optional (default=None)
+            column that contains the wq values in load/conc.
+        subcatchment_col: string, optional (default='subcatchment')
+            column that contains the subcatchment names in load/conc.
+        pollutant_col: string, optional (default='pollutant')
+            column that contains the pollutant names in load/conc.
+        wq_unit_col: string, optional (default='unit')
+            column that contains the units of pollutants in load/conc.
+        xtype_col: string, optional (default='xtype')
+            column that contains the node/link type in the nodes_df/edges_df.
+        volume_val_col: string, optional (default='volume')
+            column that contains the volume values in the nodes_df/edges_df.
+        vol_unit_col: string, optional (default='unit')
+            column that contains the volume units in the nodes_df/edges_df.
+        inlet_col: string, optional (default='inlet_node')
+            column that contains the inlet in edges_df.
+        outlet_col: string, optional (default='outlet_node')
+            column that contains the outlet in edges_df.
 
         """
 
@@ -328,7 +355,7 @@ class ScenarioLoading(object):
             # initialize
             self.concentration
 
-        self.check_units()
+        # self.check_units()
 
     def check_units(self):
         load_units = [_.split('/')[-1]

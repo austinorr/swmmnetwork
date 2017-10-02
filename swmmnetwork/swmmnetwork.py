@@ -107,14 +107,13 @@ class SwmmNetwork(nx.MultiDiGraph):
     """
 
     def __init__(self,
-                 data=None,
                  nodes=[],
                  edges=[],
                  treated=True,
                  name_col='id',
                  vol_col='volume',
                  load_cols=['load', ],
-                 treated_flags=["-t", ],
+                 treated_flags=["-TR", ],
                  vol_reduced_flags=["-inf", ],
                  outfall_flags=['OF'],
                  bmp_type_mapping={},
