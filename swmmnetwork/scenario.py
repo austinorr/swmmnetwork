@@ -7,6 +7,7 @@ def assignrename(df, xtype, volcol):
 
 
 class ScenarioHydro(object):
+
     def __init__(self, inp, rpt):
         """
         inp: swmmreport.InpFile().
@@ -17,11 +18,11 @@ class ScenarioHydro(object):
         self.inp = inp
         self.rpt = rpt
 
-        self.flow_unit = (rpt.orig_file[rpt._find_line('Flow Units')]
+        self.flow_unit = (rpt.orig_file[rpt.find_line_num('Flow Units')]
                              .split('.')
                              .pop(-1)
                              .strip()
-        )
+                          )
 
         # Need to kick this can for now
         if self.flow_unit == 'CFS':
@@ -38,11 +39,10 @@ class ScenarioHydro(object):
         self.proxy_conc_unit = inp.pollutants.Units.values[0]
         self.proxy_pollutant_conc = float(inp.pollutants.Crain.values[0])
 
-
         # initialize properties
         self._pollutant_to_vol = None
         self._intermediate_link_volume = None
-        
+
         self._subcatchments = None
         self._nodes = None
         self._storage_units = None
@@ -56,11 +56,10 @@ class ScenarioHydro(object):
         self._alledges = None
         self._allnodes = None
 
-
     def conversion_factor(self, flowunit, concunit):
-        ug_to_mg = 1/1000
-        mg_to_lbs = 1/453592
-        l_to_gal = 1/3.78541
+        ug_to_mg = 1 / 1000
+        mg_to_lbs = 1 / 453592
+        l_to_gal = 1 / 3.78541
 
         if concunit == 'MG/L':
             conc_conversion = 1
@@ -78,21 +77,20 @@ class ScenarioHydro(object):
     @property
     def pollutant_to_vol(self):
         if self._pollutant_to_vol is None:
-            conversion = self.conversion_factor(self.flow_unit, self.proxy_conc_unit)
-            self._pollutant_to_vol = (conversion/self.proxy_pollutant_conc)
+            conversion = self.conversion_factor(
+                self.flow_unit, self.proxy_conc_unit)
+            self._pollutant_to_vol = (conversion / self.proxy_pollutant_conc)
         return self._pollutant_to_vol
-
 
     @property
     def intermediate_link_volume(self):
         if self._intermediate_link_volume is None:
             self._intermediate_link_volume = (self.rpt.link_pollutant_load_results
-                                                 .mul(self.pollutant_to_vol)
-                                                 .join(self.rpt.link_flow_results.Type)
-                                                 .rename(columns={self.proxycol: 'converted_vol'})
-            )
+                                              .mul(self.pollutant_to_vol)
+                                              .join(self.rpt.link_flow_results.Type)
+                                              .rename(columns={self.proxycol: 'converted_vol'})
+                                              )
         return self._intermediate_link_volume
-
 
     @property
     def subcatchments(self):
@@ -100,7 +98,7 @@ class ScenarioHydro(object):
             subcatchments = (self.rpt.subcatchment_runoff_results
                                  .pipe(assignrename, 'subcatchments', self.subcatchment_volcol)
                                  .loc[:, ['xtype', 'volume']]
-            )
+                             )
             self._subcatchments = subcatchments
 
         return self._subcatchments
@@ -117,10 +115,9 @@ class ScenarioHydro(object):
                                          .rename(columns={'Outlet': 'Outlet_Node'})
                                          .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
                                          .rename(columns=lambda s: s.lower())
-            )
+                                     )
 
         return self._catchment_links
-
 
     @property
     def nodes(self):
@@ -128,7 +125,7 @@ class ScenarioHydro(object):
             nodes = (self.rpt.node_inflow_results
                              .pipe(assignrename, 'nodes', self.node_volcol)
                              .loc[:, ['xtype', 'volume']]
-            )
+                     )
             self._nodes = nodes
         return self._nodes
 
@@ -143,7 +140,6 @@ class ScenarioHydro(object):
     #         self._storage_units = storage_units
     #     return self._storage_units
 
-
     # It looks like that this might get repeated from self.nodes
     @property
     def outfalls(self):
@@ -153,7 +149,7 @@ class ScenarioHydro(object):
                                 .pipe(assignrename, 'outfalls', self.outfall_volcol)
                                 .loc[:, ['xtype', 'volume']]
                                 .rename(columns=lambda s: s.lower())
-            )
+                        )
             self._outfalls = outfalls
         return self._outfalls
 
@@ -162,13 +158,13 @@ class ScenarioHydro(object):
         if self._weirs is None:
             self._weirs = (self.inp
                                .weirs
-                               .loc[:,['From_Node', 'To_Node']]
+                               .loc[:, ['From_Node', 'To_Node']]
                                .rename(columns={'From_Node': 'Inlet_Node', 'To_Node': 'Outlet_Node'})
                                .join(self.intermediate_link_volume, how='left')
                                .pipe(assignrename, 'weirs', 'converted_vol')
                                .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
                                .rename(columns=lambda s: s.lower())
-            )
+                           )
         return self._weirs
 
     @property
@@ -176,12 +172,12 @@ class ScenarioHydro(object):
         if self._outlets is None:
             self._outlets = (self.inp
                                  .outlets
-                                 .loc[:,['Inlet_Node', 'Outlet_Node']]
+                                 .loc[:, ['Inlet_Node', 'Outlet_Node']]
                                  .join(self.intermediate_link_volume, how='left')
                                  .pipe(assignrename, 'outlets', 'converted_vol')
-                                 .loc[:, ['Inlet_Node', 'Outlet_Node','xtype', 'volume']]
+                                 .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
                                  .rename(columns=lambda s: s.lower())
-            )
+                             )
         return self._outlets
 
     @property
@@ -189,12 +185,12 @@ class ScenarioHydro(object):
         if self._conduits is None:
             self._conduits = (self.inp
                                   .conduits
-                                  .loc[:,['Inlet_Node', 'Outlet_Node']]
+                                  .loc[:, ['Inlet_Node', 'Outlet_Node']]
                                   .join(self.intermediate_link_volume, how='left')
                                   .pipe(assignrename, 'conduits', 'converted_vol')
                                   .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
                                   .rename(columns=lambda s: s.lower())
-            )
+                              )
         return self._conduits
 
     @property
@@ -204,12 +200,12 @@ class ScenarioHydro(object):
         """
         if self._alledges is None:
             self._alledges = (self.catchment_links
-                               .append(self.weirs)
-                               .append(self.outlets)
-                               .append(self.conduits)
-                               .assign(unit=self.vol_unit)
-                               .rename(columns=lambda s: s.lower())
-            )
+                              .append(self.weirs)
+                              .append(self.outlets)
+                              .append(self.conduits)
+                              .assign(unit=self.vol_unit)
+                              .rename(columns=lambda s: s.lower())
+                              )
         return self._alledges
 
     @property
@@ -220,12 +216,12 @@ class ScenarioHydro(object):
         if self._allnodes is None:
             self._allnodes = (self.subcatchments
                                   .append(self.nodes)
-                                #   See storage units above
-                                #   .append(self.storage_units)
+                              #   See storage units above
+                              #   .append(self.storage_units)
                                   .append(self.outfalls)
                                   .assign(unit=self.vol_unit)
                                   .rename(columns=lambda s: s.lower())
-            )
+                              )
         return self._allnodes
 
     @property
@@ -236,21 +232,20 @@ class ScenarioHydro(object):
         return (self.inp
                     .coordinates.astype(float)
                     .append(self.inp.polygons.astype(float)
-                               .groupby(self.inp.polygons.index)
-                               .mean())
+                            .groupby(self.inp.polygons.index)
+                            .mean())
                     .T
                     .to_dict('list')
-        )
-
+                )
 
 
 class ScenarioLoading(object):
+
     def __init__(self, nodes_df, edges_df, load=None, conc=None, pocs='all',
                  wq_value_col=None, subcatchment_col='subcatchment',
                  pollutant_col='pollutant', wq_unit_col='unit', xtype_col='xtype',
                  volume_val_col='volume', vol_unit_col='unit',
                  inlet_col='inlet_node', outlet_col='outlet_node'):
-
         """
         - nodes_df: pandas.DataFrame, contains 'xtype_col',
             'volume_val_col', 'vol_unit_col', and an 'index'
@@ -282,7 +277,7 @@ class ScenarioLoading(object):
             contains the inlet in edges_df.
         - outlet_col: string (default='outlet_node'), name of the column
             that contains the outlet in edges_df.
-        
+
         """
 
         if (load is not None) and (conc is not None):
@@ -319,7 +314,7 @@ class ScenarioLoading(object):
                                  .loc[:, self._pollutant_col]
                                  .unique()
                                  .tolist()
-                )
+                             )
             # initialize
             self.load
 
@@ -329,24 +324,25 @@ class ScenarioLoading(object):
                                  .loc[:, self._pollutant_col]
                                  .unique()
                                  .tolist()
-                )
+                             )
             # initialize
             self.concentration
 
         self.check_units()
 
     def check_units(self):
-        load_units = [_.split('/')[-1] for _ in self.load.dropna().unit.unique()]
+        load_units = [_.split('/')[-1]
+                      for _ in self.load.dropna().unit.unique()]
         vol_units = (self.nodes_vol.unit.unique().tolist() +
-            self.edges_vol.unit.unique().tolist())
-        
+                     self.edges_vol.unit.unique().tolist())
+
         unique_load_units = (self.load.dropna()
                                  .drop_duplicates(subset=['pollutant', 'unit'])
                                  .groupby('pollutant')
                                  .count()
                                  .unit
                                  .max()
-        )
+                             )
 
         if len(set(load_units)) > 1:
             e = 'Only one load volume unit supported.'
@@ -362,19 +358,18 @@ class ScenarioLoading(object):
             raise ValueError(e)
         else:
             pass
-        
-        
+
     # these are here if we need to do something with the vol in the future
     @property
     def nodes_vol(self):
         if self._nodes_vol is None:
             self._nodes_vol = (self.raw_nodes_vol
                                    .rename(columns={
-                                        self._xtype_col: 'xtype',
-                                        self._volume_val_col: 'volume',
-                                        self._vol_unit_col: 'unit'
+                                       self._xtype_col: 'xtype',
+                                       self._volume_val_col: 'volume',
+                                       self._vol_unit_col: 'unit'
                                    })
-            )
+                               )
         return self._nodes_vol
 
     # these are here if we need to do something with the vol in the future
@@ -383,29 +378,29 @@ class ScenarioLoading(object):
         if self._edges_vol is None:
             self._edges_vol = (self.raw_edges_vol
                                    .rename(columns={
-                                        self._xtype_col: 'xtype',
-                                        self._volume_val_col: 'volume',
-                                        self._vol_unit_col: 'unit',
-                                        self._inlet_col: 'inlet_node',
-                                        self._outlet_col: 'outlet_node'
+                                       self._xtype_col: 'xtype',
+                                       self._volume_val_col: 'volume',
+                                       self._vol_unit_col: 'unit',
+                                       self._inlet_col: 'inlet_node',
+                                       self._outlet_col: 'outlet_node'
                                    })
-            )
+                               )
         return self._edges_vol
-            
-    #tidy vs wide data not hymo
+
+    # tidy vs wide data not hymo
     def calculate_loading(self):
         if self._load is None:
             self._load = (self.concentration
                               .join(self.nodes_vol, on='subcatchment',
                                     how='outer', lsuffix='', rsuffix='_vol')
                               .assign(load=lambda df: df.concentration * df.volume)
-            )
+                          )
         elif self._concentration is None:
             self._concentration = (self.load
                                        .join(self.nodes_vol, on='subcatchment',
                                              how='outer', lsuffix='', rsuffix='_vol')
                                        .assign(load=lambda df: df.load / df.volume)
-            )
+                                   )
 
     @property
     def load(self):
@@ -417,7 +412,7 @@ class ScenarioLoading(object):
                             self._pollutant_col: 'pollutant',
                             self._wq_unit_col: 'unit'})
                         .query('pollutant in @self.pocs')
-            )
+                    )
             self._load = load
             self.calculate_loading()
         return self._load
@@ -427,16 +422,15 @@ class ScenarioLoading(object):
         if self._concentration is None:
             concentration = (self.raw_concentration
                                  .rename(columns={
-                                    self._wq_value_col: 'concentration',
-                                    self._subcatchment_col: 'subcatchment',
-                                    self._pollutant_col: 'pollutant',
-                                    self._wq_unit_col: 'unit'})
+                                     self._wq_value_col: 'concentration',
+                                     self._subcatchment_col: 'subcatchment',
+                                     self._pollutant_col: 'pollutant',
+                                     self._wq_unit_col: 'unit'})
                                  .query('pollutant in @self.pocs')
-            )
+                             )
             self._concentration = concentration
             self.calculate_loading()
         return self._concentration
-
 
     @property
     def edge_list(self):
@@ -452,19 +446,19 @@ class ScenarioLoading(object):
                                 .loc[:, self.pocs]
                                 .reset_index('unit'),
                             on='inlet_node', lsuffix='_vol')
-                     .reset_index()
-                     .set_index(['inlet_node', 'outlet_node'])
-                     .loc[:, ['id', 'xtype', 'volume', 'unit'] + self.pocs]
-                     .to_dict('index')
-        )
+                 .reset_index()
+                 .set_index(['inlet_node', 'outlet_node'])
+                 .loc[:, ['id', 'xtype', 'volume', 'unit'] + self.pocs]
+                 .to_dict('index')
+                 )
         return list((_[0][0], _[0][1], _[1]) for _ in edges.items())
 
     @property
     def node_list(self):
         node = (self.load
-                    # .query('xtype == "subcatchments"')
+                # .query('xtype == "subcatchments"')
                     .loc[:, ['subcatchment', 'pollutant', 'unit', 'xtype',
-                            'volume', 'unit_vol', 'load']]
+                             'volume', 'unit_vol', 'load']]
                     .set_index(['subcatchment', 'pollutant',
                                 'unit', 'xtype',
                                 'volume', 'unit_vol'])
@@ -474,6 +468,6 @@ class ScenarioLoading(object):
                     .reset_index()
                     .set_index('subcatchment')
                     .to_dict('index')
-        )
+                )
 
         return list((_[0], _[1]) for _ in node.items())

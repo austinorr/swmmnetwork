@@ -9,15 +9,16 @@ import pandas
 
 import networkx as nx
 
+
 def nodes_to_df(G):
     ls = []
     for node in G.nodes(data=True):
         df = {}
         n, data = node
-        df['id']=n
-        df['from']=n
-        df['to']=G.successors(n)
-        df['type']='node'
+        df['id'] = n
+        df['from'] = n
+        df['to'] = G.successors(n)
+        df['type'] = 'node'
         df.update(data)
         ls.append(df)
     return pandas.DataFrame(ls)
@@ -28,12 +29,13 @@ def edges_to_df(G):
     for edge in G.edges(data=True):
         df = {}
         _from, _to, data = edge
-        df['from']=_from
-        df['to']=_to
-        df['type']='link'
+        df['from'] = _from
+        df['to'] = _to
+        df['type'] = 'link'
         df.update(data)
         ls.append(df)
     return pandas.DataFrame(ls)
+
 
 def sum_edge_attr(G, node, attr, method='edges', filter_key=None, include_filter_flags=None, exclude_filter_flags=None):
     """accumulate attributes for one node_id in network G
@@ -76,11 +78,11 @@ def sum_edge_attr(G, node, attr, method='edges', filter_key=None, include_filter
     for edge in edges:
         _from, _to, data = edge
 
-        if filter_key is not None: # user intends to filter the edges
+        if filter_key is not None:  # user intends to filter the edges
             key = data[filter_key]
             if include_filter_flags is not None:
                 if any([i in key for i in include_filter_flags]):
-                    if exclude_filter_flags is not None: #
+                    if exclude_filter_flags is not None:
                         if not any([i in key for i in exclude_filter_flags]):
                             val += data.get(attr, 0)
                     else:
@@ -90,7 +92,7 @@ def sum_edge_attr(G, node, attr, method='edges', filter_key=None, include_filter
                 if not any([i in key for i in exclude_filter_flags]):
                     val += data.get(attr, 0)
 
-            else: #user provided key but no flags, perform summation
+            else:  # user provided key but no flags, perform summation
                 val += data.get(attr, 0)
 
         else:
@@ -104,8 +106,6 @@ class SwmmNetwork(nx.MultiDiGraph):
     by the SWMM.INP file. This file separates the
     """
 
-
-
     def __init__(self,
                  data=None,
                  nodes=[],
@@ -113,13 +113,13 @@ class SwmmNetwork(nx.MultiDiGraph):
                  treated=True,
                  name_col='id',
                  vol_col='volume',
-                 load_cols=['load',],
-                 treated_flags=["-t",],
-                 vol_reduced_flags=["-inf",],
+                 load_cols=['load', ],
+                 treated_flags=["-t", ],
+                 vol_reduced_flags=["-inf", ],
                  outfall_flags=['OF'],
                  bmp_type_mapping={},
                  **kwargs
-                ):
+                 ):
         super().__init__(**kwargs)
 
         self.name_col = name_col
@@ -141,7 +141,6 @@ class SwmmNetwork(nx.MultiDiGraph):
     def _seed_subcatchment_links(self):
         """This method should build the 'out' links from subcatchment nodes"""
         pass
-
 
     def solve(self):
 
@@ -166,29 +165,33 @@ class SwmmNetwork(nx.MultiDiGraph):
                 pct_vol_cap_col = vol_col + "_pct_capture"
 
                 # combine node influent volume and loads
-                vol_in = sum_edge_attr(self, node, vol_col, method='in_edges') + self.node[node].get(vol_col, 0)
-                load_in = sum_edge_attr(self, node, load_col, method='in_edges') + self.node[node].get(load_col, 0)
+                vol_in = sum_edge_attr(
+                    self, node, vol_col, method='in_edges') + self.node[node].get(vol_col, 0)
+                load_in = sum_edge_attr(
+                    self, node, load_col, method='in_edges') + self.node[node].get(load_col, 0)
                 conc_in = load_in / vol_in
 
                 self.node[node][vol_col] = vol_in
                 self.node[node][load_col] = load_in
                 self.node[node][conc_col] = conc_in
 
-
-                # TODO: This could be adapted into a 'solve node' function. is it necessary/cleaner?
+                # TODO: This could be adapted into a 'solve node' function. is
+                # it necessary/cleaner?
 
                 # solve for node effluent loads and volumes
                 for edge in self.out_edges(node, data=True):
                     _from, _to, data = edge
 
                     if load_col in data:
-                        warnings.warn('Overwriting load data at edge: {}'.format(edge))
+                        warnings.warn(
+                            'Overwriting load data at edge: {}'.format(edge))
 
                     data[load_col] = conc_in * data[vol_col]
 
-                    # apply treatment to link via concentration influent vs effluent relationship
+                    # apply treatment to link via concentration influent vs
+                    # effluent relationship
                     if self.treated and any([i in data[self.name_col] for i in self.treated_flags]):
-                        eff_conc = ((1-0.7) * conc_in)
+                        eff_conc = ((1 - 0.7) * conc_in)
                         data[load_col] = eff_conc * data[vol_col]
 
                 if any([i in node for i in self.outfall_flags]):
@@ -197,22 +200,24 @@ class SwmmNetwork(nx.MultiDiGraph):
                     vol_out = vol_in
                     vol_treated = 0
                 else:
-                    load_out = sum_edge_attr(self, node, load_col, method='out_edges') #don't filter this, we've already adjusted the loads
+                    # don't filter this, we've already adjusted the loads
+                    load_out = sum_edge_attr(
+                        self, node, load_col, method='out_edges')
                     vol_out = sum_edge_attr(self, node, vol_col, method='out_edges',
-                                         filter_key=self.name_col, exclude_filter_flags=self.vol_reduced_flags)
+                                            filter_key=self.name_col, exclude_filter_flags=self.vol_reduced_flags)
 
                     vol_treated = sum_edge_attr(self, node, vol_col, method='out_edges',
-                                             filter_key=self.name_col, include_filter_flags=self.treated_flags)
+                                                filter_key=self.name_col, include_filter_flags=self.treated_flags)
 
                 load_reduced = load_in - load_out
 
                 # assign load attributes
                 self.node[node][load_out_col] = load_out
                 self.node[node][load_red_col] = load_reduced
-                self.node[node][pct_load_red_col] = 100 * (load_reduced / load_in)
+                self.node[node][pct_load_red_col] = 100 * \
+                    (load_reduced / load_in)
 
                 vol_reduced = vol_in - vol_out
-
 
                 # assign vol attributes
                 self.node[node][vol_out_col] = vol_out
@@ -221,10 +226,12 @@ class SwmmNetwork(nx.MultiDiGraph):
                 self.node[node][pct_vol_red_col] = 100 * (vol_reduced / vol_in)
 
                 self.node[node][vol_tmnt_col] = vol_treated
-                self.node[node][pct_vol_tmnt_col] = 100 * (vol_treated / vol_in)
+                self.node[node][pct_vol_tmnt_col] = 100 * \
+                    (vol_treated / vol_in)
 
                 self.node[node][vol_cap_col] = vol_treated + vol_reduced
-                self.node[node][pct_vol_cap_col] = 100 * ((vol_treated + vol_reduced) / vol_in)
+                self.node[node][pct_vol_cap_col] = 100 * \
+                    ((vol_treated + vol_reduced) / vol_in)
 
         self._results = (
             pandas.concat([nodes_to_df(self), edges_to_df(self)])
@@ -232,4 +239,3 @@ class SwmmNetwork(nx.MultiDiGraph):
         )
 
         return self._results
-
