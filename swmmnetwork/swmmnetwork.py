@@ -107,16 +107,15 @@ class SwmmNetwork(nx.MultiDiGraph):
     """
 
     def __init__(self,
-                 nodes=[],
-                 edges=[],
                  treated=True,
                  name_col='id',
                  vol_col='volume',
                  load_cols=['load', ],
-                 treated_flags=["-TR", ],
-                 vol_reduced_flags=["-inf", ],
+                 treated_flags=["TR", ],
+                 vol_reduced_flags=["INF", ],
                  outfall_flags=['OF'],
-                 bmp_type_mapping={},
+                 bmp_performance_mapping={},  # {'flag': fxn(inf_conc)}
+                 flag_split_char="-",
                  **kwargs
                  ):
         super().__init__(**kwargs)
@@ -147,6 +146,10 @@ class SwmmNetwork(nx.MultiDiGraph):
 
         for node in nx.topological_sort(self):
 
+            vol_in = sum_edge_attr(
+                self, node, vol_col, method='in_edges') + self.node[node].get(vol_col, 0)
+            self.node[node][vol_col] = vol_in
+
             for load_col in self.load_cols:
 
                 conc_col = load_col + "_conc"
@@ -164,13 +167,11 @@ class SwmmNetwork(nx.MultiDiGraph):
                 pct_vol_cap_col = vol_col + "_pct_capture"
 
                 # combine node influent volume and loads
-                vol_in = sum_edge_attr(
-                    self, node, vol_col, method='in_edges') + self.node[node].get(vol_col, 0)
+
                 load_in = sum_edge_attr(
                     self, node, load_col, method='in_edges') + self.node[node].get(load_col, 0)
                 conc_in = load_in / vol_in
 
-                self.node[node][vol_col] = vol_in
                 self.node[node][load_col] = load_in
                 self.node[node][conc_col] = conc_in
 
@@ -235,6 +236,7 @@ class SwmmNetwork(nx.MultiDiGraph):
         self._results = (
             pandas.concat([nodes_to_df(self), edges_to_df(self)])
             .reset_index(drop=True)
+            .set_index('id').sort_index()
         )
 
         return self._results
