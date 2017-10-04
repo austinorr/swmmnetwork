@@ -1,7 +1,9 @@
 
 KNOWN_CONVERSIONS = [
     # from, to, factor usage: from * factor = to
-    ('mgal', 'acre-ft', 1 / 0.325851),
+    ('mgal', 'acre-ft', 1 / 0.32585058),
+    ('acre-ft', 'mgal', .32585058),
+    ('acre-in', 'mgal', .32585058 / 12),
 ]
 
 

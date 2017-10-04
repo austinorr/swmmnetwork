@@ -60,9 +60,13 @@ class ScenarioHydro(object):
         # Need to kick this can for now
         if self.flow_unit == 'CFS':
             self.subcatchment_volcol = 'Total_Runoff_mgal'
+            self.subcatchment_depthcol = 'Total_Runoff_in'
+            self.subcatchment_areacol = 'Area'
             self.node_volcol = 'Total_Inflow_Volume_mgals'
             self.outfall_volcol = 'Total_Volume_10_6_gal'
             self.vol_unit = 'mgal'
+            self.depth_unit = 'in'
+            self.area_unit = 'acre'
         else:
             e = 'Only standard units supported.'
             raise(ValueError(e))
@@ -77,13 +81,12 @@ class ScenarioHydro(object):
 
         self._subcatchments = None
         self._nodes = None
-        self._storage_units = None
-        self._outfalls = None
 
         self._catchment_links = None
         self._weirs = None
         self._outlets = None
         self._conduits = None
+        self._orifices = None
 
         self._all_edges = None
         self._all_nodes = None
@@ -92,6 +95,7 @@ class ScenarioHydro(object):
         ug_to_mg = 1 / 1000
         mg_to_lbs = 1 / 453592
         l_to_gal = 1 / 3.78541
+        gal_to_mgal = 1 / 1000000
 
         if concunit == 'MG/L':
             conc_conversion = 1
@@ -102,7 +106,7 @@ class ScenarioHydro(object):
 
         if self.flow_unit == 'CFS':
             mgL_to_lbsgal = l_to_gal / mg_to_lbs * conc_conversion
-            return mgL_to_lbsgal
+            return mgL_to_lbsgal * gal_to_mgal
         else:
             raise(ValueError)
 
@@ -127,10 +131,15 @@ class ScenarioHydro(object):
     @property
     def subcatchments(self):
         if self._subcatchments is None:
-            subcatchments = (self.rpt.subcatchment_runoff_results
-                             .pipe(assignrename, 'subcatchments', self.subcatchment_volcol)
-                             .loc[:, ['xtype', 'volume']]
-                             )
+            subcatchments = (
+                self.rpt.subcatchment_runoff_results
+                .join(self.inp.subcatchments)
+                .assign(volume=lambda df: df[self.subcatchment_areacol].astype(numpy.float64) * df[self.subcatchment_depthcol])
+                .assign(unit='acre-in')
+                .pipe(convert_units, 'unit', 'volume', *('acre-in', 'mgal', .32585058 / 12))
+                .pipe(assignrename, 'subcatchments', 'volume')
+                .loc[:, ['xtype', 'volume']]
+            )
             self._subcatchments = subcatchments
 
         return self._subcatchments
@@ -138,8 +147,8 @@ class ScenarioHydro(object):
     @property
     def catchment_links(self):
         if self._catchment_links is None:
-            self._catchment_links = (self.rpt.subcatchment_runoff_results
-                                     .pipe(assignrename, 'dt', self.subcatchment_volcol)
+            self._catchment_links = (self.subcatchments
+                                     .pipe(assignrename, 'dt', 'volume')
                                      .assign(Inlet_Node=lambda df: df.index)
                                      .assign(id=lambda df: df.index.map(lambda s: '^' + s))
                                      .join(self.inp.subcatchments.Outlet)
@@ -174,6 +183,20 @@ class ScenarioHydro(object):
                            .rename(columns=lambda s: s.lower())
                            )
         return self._weirs
+
+    @property
+    def orifices(self):
+        if self._orifices is None:
+            self._orifices = (self.inp
+                              .orifices
+                              .loc[:, ['From_Node', 'To_Node']]
+                              .rename(columns={'From_Node': 'Inlet_Node', 'To_Node': 'Outlet_Node'})
+                              .join(self.intermediate_link_volume, how='left')
+                              .pipe(assignrename, 'orifices', 'converted_vol')
+                              .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
+                              .rename(columns=lambda s: s.lower())
+                              )
+        return self._orifices
 
     @property
     def outlets(self):
@@ -226,6 +249,7 @@ class ScenarioHydro(object):
                                .append(self.weirs)
                                .append(self.outlets)
                                .append(self.conduits)
+                               .append(self.orifices)
                                .assign(unit=self.vol_unit)
                                .pipe(self._convert_volumes)
                                .rename(columns=lambda s: s.lower())
@@ -462,38 +486,65 @@ class ScenarioLoading(object):
     def edge_list(self):
         edges = self.edges_vol.copy()
         edges.index = edges.index.set_names('id')
-        edges = (edges.join(self.load
-                                .drop('unit', axis='columns')
-                                .query('xtype == "subcatchments"')
-                                .drop_duplicates(subset=['subcatchment', 'pollutant'])
-                                .set_index(['subcatchment', 'pollutant'])
-                                .loc[:, ['load']]
-                                .unstack('pollutant')
-                                .load
-                                .loc[:, self.pocs],
-                            on='inlet_node', lsuffix='_vol')
-                 .reset_index()
-                 .set_index(['inlet_node', 'outlet_node'])
-                 .loc[:, ['id', 'xtype', 'volume'] + self.pocs]
-                 .to_dict('index')
-                 )
-        return list((_[0][0], _[0][1], _[1]) for _ in edges.items())
+        edges = (
+            edges
+            # .join(self.load
+            #       .drop('unit', axis='columns')
+            #       .query('xtype == "subcatchments"')
+            #       .drop_duplicates(subset=['subcatchment', 'pollutant'])
+            #       .set_index(['subcatchment', 'pollutant'])
+            #       .loc[:, ['load']]
+            #       .unstack('pollutant')
+
+            #       .load.loc[:, self.pocs],
+            #       on='inlet_node', lsuffix='_vol')
+            .reset_index()
+            .fillna(0)
+            .set_index(['inlet_node', 'outlet_node'])
+            .loc[:, ['id', 'xtype', 'volume'] ]#+ self.pocs]
+            .to_dict('index')
+        )
+        return list((k[0], k[1], v) for k, v in edges.items())
 
     @property
     def node_list(self):
-        node = (self.load
-                # .query('xtype == "subcatchments"')
-                    .drop('unit', axis='columns')
-                    .loc[:, ['subcatchment', 'pollutant', 'xtype',
-                             'volume', 'unit_vol', 'load']]
-                    .set_index(['subcatchment', 'pollutant',
-                                'xtype', 'volume', 'unit_vol'])
-                    .unstack('pollutant')
-                    .loc[:, 'load']
-                    .loc[:, self.pocs]
-                    .reset_index()
-                    .set_index('subcatchment')
-                    .to_dict('index')
-                )
+        node = (
+            self.load
+            .query('xtype == "subcatchments"')
+            .drop('unit', axis='columns')
+            .loc[:, ['subcatchment', 'pollutant', 'xtype',
+                     'volume', 'unit_vol', 'load']]
+            .set_index(['subcatchment', 'pollutant',
+                        'xtype', 'volume', 'unit_vol'])
+            .unstack('pollutant')
+            .fillna(0)
+            .loc[:, 'load']
+            .loc[:, self.pocs]
+            .reset_index()
+            .set_index('subcatchment')
+            .to_dict('index')
+        )
 
-        return list((_[0], _[1]) for _ in node.items())
+        return list(node.items())
+
+    @property
+    def check_node_list(self):
+        node = (
+            self.load
+            .query('xtype == "nodes"')
+            .drop('unit', axis='columns')
+            .loc[:, ['subcatchment',  'xtype',
+                     'volume', 'unit_vol', ]]
+            # .set_index(['subcatchment', 'pollutant',
+            #             'xtype', 'volume', 'unit_vol'])
+            # .unstack('pollutant')
+            .fillna(0)
+            # .loc[:, 'load']
+            # .loc[:, self.pocs]
+            # .reset_index()
+            .rename(columns={'volume': "_ck_volume"})
+            .set_index('subcatchment')
+            .to_dict('index')
+        )
+
+        return list(node.items())
