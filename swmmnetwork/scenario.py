@@ -488,23 +488,17 @@ class ScenarioLoading(object):
         edges.index = edges.index.set_names('id')
         edges = (
             edges
-            # .join(self.load
-            #       .drop('unit', axis='columns')
-            #       .query('xtype == "subcatchments"')
-            #       .drop_duplicates(subset=['subcatchment', 'pollutant'])
-            #       .set_index(['subcatchment', 'pollutant'])
-            #       .loc[:, ['load']]
-            #       .unstack('pollutant')
-
-            #       .load.loc[:, self.pocs],
-            #       on='inlet_node', lsuffix='_vol')
             .reset_index()
             .fillna(0)
             .set_index(['inlet_node', 'outlet_node'])
-            .loc[:, ['id', 'xtype', 'volume'] ]#+ self.pocs]
-            .to_dict('index')
+            .loc[:, ['id', 'xtype', 'volume'] ]
         )
-        return list((k[0], k[1], v) for k, v in edges.items())
+        edge_list = []
+        for dtype in edges.xtype.unique():
+
+            _list = edges.query('xtype == @dtype').to_dict('index')
+            edge_list.extend(list((k[0], k[1], v) for k, v in _list.items()))
+        return edge_list
 
     @property
     def node_list(self):
