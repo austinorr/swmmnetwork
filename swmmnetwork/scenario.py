@@ -2,11 +2,7 @@ import numpy
 import pandas
 from .unit_conversions import convert_units, KNOWN_CONVERSIONS
 
-try:
-    from hymo import SWMMInpFile, SWMMReportFile
-except ImportError:
-    pass
-
+from hymo import SWMMInpFile, SWMMReportFile
 
 class ScenarioHydro(object):
 

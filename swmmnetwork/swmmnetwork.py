@@ -370,7 +370,7 @@ class SwmmNetwork(nx.MultiDiGraph):
                  bmp_performance_mapping_conc=None,
                  scenario=None,
                  **kwargs):
-        super().__init__(**kwargs)
+        nx.MultiDiGraph.__init__(self, **kwargs)
 
         """
         Parameters
