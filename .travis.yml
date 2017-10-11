@@ -6,16 +6,16 @@ cache: pip
 
 matrix:
   include:
-    - python: 2.7
-      env:
-        - COVERAGE=false
-        - TESTERS="pytest"
-        - ARGS="--verbose"
-    - python: 3.4
-      env:
-        - COVERAGE=false
-        - TESTERS="pytest"
-        - ARGS="--verbose"
+    # - python: 2.7
+    #   env:
+    #     - COVERAGE=false
+    #     - TESTERS="pytest"
+    #     - ARGS="--verbose"
+    # - python: 3.4
+    #   env:
+    #     - COVERAGE=false
+    #     - TESTERS="pytest"
+    #     - ARGS="--verbose"
     - python: 3.5
       env:
         - COVERAGE=true
