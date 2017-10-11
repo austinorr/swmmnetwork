@@ -66,6 +66,9 @@ class ScenarioHydro(object):
             self.vol_unit = 'mgal'
             self.depth_unit = 'in'
             self.area_unit = 'acre'
+        elif self.flow_unit == 'LPS':
+            e = 'Only standard units supported.'
+            raise(ValueError(e))
         else:
             e = 'Only standard units supported.'
             raise(ValueError(e))
@@ -168,6 +171,8 @@ class ScenarioHydro(object):
     @property
     def nodes(self):
         if self._nodes is None:
+            # if we want to carry forward the types of nodes, we can fix it
+            # here.
             nodes = (self.rpt.node_inflow_results
                      .pipe(self.assign_xtype_volcol, 'nodes', self.node_volcol)
                      .loc[:, ['xtype', 'volume']]
@@ -263,6 +268,8 @@ class ScenarioHydro(object):
                 .assign(unit=self.vol_unit)
                 .pipe(self._convert_volumes)
                 .rename(columns=lambda s: s.lower())
+                .assign(outlet_node=lambda df: df.outlet_node.astype(str))
+                .assign(inlet_node=lambda df: df.inlet_node.astype(str))
             )
         return self._all_edges
 
@@ -520,7 +527,8 @@ class ScenarioLoading(object):
         edge_list = []
         for dtype in edges.xtype.unique():
             _list = edges.query('xtype == @dtype').to_dict('index')
-            edge_list.extend(list((k[0], k[1], v) for k, v in _list.items()))
+            edge_list.extend(list((str(k[0]), str(k[1]), v)
+                                  for k, v in _list.items()))
         return edge_list
 
     @property

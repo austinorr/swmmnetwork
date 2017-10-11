@@ -27,7 +27,7 @@ test_requirements = [
 
 setup(
     name='swmmnetwork',
-    version='0.1.0',
+    version='0.1.1',
     description="SWMMNetwork helps users of EPA SWMM 5.1 perform water quality and load reduction calculations. ",
     long_description=readme + '\n\n' + history,
     author="Austin Orr",

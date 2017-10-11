@@ -206,11 +206,11 @@ def _solve_node(G, node_name, edge_name_col='id', split_on='-',
         vol_eff = edge_vol_out
         if vol_reduced_flags:
             vol_eff = sum_edge_attr(G, node_name, vol_col, method='out_edges', split_on=split_on,
-                                filter_key=edge_name_col, exclude_filter_flags=vol_reduced_flags)
+                                    filter_key=edge_name_col, exclude_filter_flags=vol_reduced_flags)
 
         if tmnt_flags:
             vol_treated = sum_edge_attr(G, node_name, vol_col, method='out_edges', split_on=split_on,
-                                    filter_key=edge_name_col, include_filter_flags=tmnt_flags)
+                                        filter_key=edge_name_col, include_filter_flags=tmnt_flags)
 
     if ck_vol_col is not None:
         vol_diff_ck_col = vol_col + "_diff_ck"
@@ -445,4 +445,3 @@ class SwmmNetwork(nx.MultiDiGraph):
                         split_on=self.split_on
                         )
         return
-
