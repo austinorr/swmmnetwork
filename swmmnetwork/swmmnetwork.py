@@ -408,7 +408,7 @@ class SwmmNetwork(nx.MultiDiGraph):
             try:
                 assert isinstance(getattr(self, name), list)
             except:
-                raise TypeError('Pass {} as a list.')
+                raise TypeError('Pass {} as a list.'.format(name))
 
         if bmp_performance_mapping_conc is None:
             bmp_performance_mapping_conc = {}
