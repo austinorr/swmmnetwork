@@ -1,7 +1,7 @@
 from pkg_resources import resource_filename
 
-import swmmnetwork
-from .utils import data_path
+# import swmmnetwork
+# from .utils import data_path
 
 try:
     import pytest
@@ -12,5 +12,5 @@ try:
         return pytest.main(options)
 
 except ImportError:
-    def test():
+    def test(*args):
         print("Tests require `pytest`")
