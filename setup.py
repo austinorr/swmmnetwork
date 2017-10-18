@@ -33,7 +33,7 @@ setup(
     author="Austin Orr",
     author_email='austinmartinorr@gmail.com',
     url='https://github.com/austinorr/swmmnetwork',
-    packages=find_packages(include=['swmmnetwork']),
+    packages=find_packages(),
     include_package_data=True,
     install_requires=requirements,
     license="BSD license",
