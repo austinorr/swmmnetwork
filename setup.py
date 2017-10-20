@@ -25,6 +25,10 @@ test_requirements = [
     # TODO: put package test requirements here
 ]
 
+package_data = {
+    'swmmnetwork.tests.data': ['*'],
+}
+
 setup(
     name='swmmnetwork',
     version='0.1.1',
@@ -34,6 +38,7 @@ setup(
     author_email='austinmartinorr@gmail.com',
     url='https://github.com/austinorr/swmmnetwork',
     packages=find_packages(),
+    package_data=package_data,
     include_package_data=True,
     install_requires=requirements,
     license="BSD license",
