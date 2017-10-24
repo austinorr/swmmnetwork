@@ -3,7 +3,7 @@ import pytest
 
 import networkx as nx
 
-from ..swmmnetwork import SwmmNetwork, sum_edge_attr
+from swmmnetwork import SwmmNetwork, sum_edge_attr
 from .utils import data_path
 
 GT = nx.MultiDiGraph([

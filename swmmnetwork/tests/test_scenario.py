@@ -7,7 +7,7 @@ import pytest
 import pandas as pd
 import pandas.util.testing as pdtest
 
-from ..scenario import ScenarioHydro, ScenarioLoading
+from swmmnetwork.scenario import ScenarioHydro, ScenarioLoading
 from .utils import data_path
 
 
