@@ -43,6 +43,7 @@ setup(
     install_requires=requirements,
     license="BSD license",
     zip_safe=False,
+    py_modules=['swmmnetwork'],
     keywords='swmmnetwork',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
