@@ -293,7 +293,7 @@ def _solve_node(G, node_name, edge_name_col='id', split_on='-',
                     elif any([i in link_name_flags for i in tmnt_flags]):
 
                         for flag in link_name_flags:
-                            # checks to see if there is a function for treatmenting this
+                            # checks to see if there is a function for treating this
                             # type of bmp and this type of load. if multiple flags are
                             # present in the link name, then the last one will be the
                             # one that has an effect on the concentration.
