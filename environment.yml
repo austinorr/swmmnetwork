@@ -3,7 +3,7 @@ channels:
 - conda-forge
 - defaults
 dependencies:
-- networkx=1.11=py35_0
+- networkx=2.0=py35_0
 - numpy=1.13.1=py35_0
 - pandas=0.20.3=py35_0
 - python=3.5.4=0

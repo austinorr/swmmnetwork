@@ -4,7 +4,7 @@
 
 __author__ = 'Austin Orr'
 __email__ = 'austinmartinorr@gmail.com'
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 
 from .swmmnetwork import SwmmNetwork, sum_edge_attr
 from .scenario import ScenarioHydro, ScenarioLoading
