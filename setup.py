@@ -2,8 +2,24 @@
 # -*- coding: utf-8 -*-
 
 """The setup script."""
-
+import io
+import os
 from setuptools import setup, find_packages
+
+
+def get_pkg_info(info_file, info):
+    val = ""
+    info_file.seek(0)
+    for line in info_file:
+        if line.startswith('__{}__'.format(info)):
+            val = line.split("=")[1].replace("'", "").replace('"', "").strip()
+    return val
+
+with open(os.path.join('swmmnetwork', '__init__.py')) as init_file:
+    author = get_pkg_info(init_file, 'author')
+    email = get_pkg_info(init_file, 'email')
+    version = get_pkg_info(init_file, 'version')
+
 
 with open('README.rst') as readme_file:
     readme = readme_file.read()
@@ -12,17 +28,13 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 requirements = [
-    # TODO: put package requirements here
-]
-
-setup_requirements = [
-    'pytest-runner',
-    # TODO(austinorr): put setup requirements (distutils extensions, etc.) here
+    'networkx>=1.11,<2',
+    'pandas',
+    'numpy',
 ]
 
 test_requirements = [
     'pytest',
-    # TODO: put package test requirements here
 ]
 
 package_data = {
@@ -31,11 +43,11 @@ package_data = {
 
 setup(
     name='swmmnetwork',
-    version='0.1.1',
+    author=author,
+    author_email=email,
+    version=version,
     description="SWMMNetwork helps users of EPA SWMM 5.1 perform water quality and load reduction calculations. ",
     long_description=readme + '\n\n' + history,
-    author="Austin Orr",
-    author_email='austinmartinorr@gmail.com',
     url='https://github.com/austinorr/swmmnetwork',
     packages=find_packages(),
     package_data=package_data,
@@ -43,7 +55,6 @@ setup(
     install_requires=requirements,
     license="BSD license",
     zip_safe=False,
-    py_modules=['swmmnetwork'],
     keywords='swmmnetwork',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
@@ -60,5 +71,4 @@ setup(
     ],
     test_suite='tests',
     tests_require=test_requirements,
-    setup_requires=setup_requirements,
 )

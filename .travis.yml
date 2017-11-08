@@ -42,7 +42,7 @@ before_install:
 install:
   - conda create --yes -n test python=$TRAVIS_PYTHON_VERSION numpy pandas
   - source activate test
-  - conda install --yes --channel=conda-forge ${TESTERS} networkx=1.11
+  - conda install --yes --channel=conda-forge ${TESTERS} networkx>=1.11
   - pip install codecov
   - pip install git+https://github.com/lucashtnguyen/hymo.git
   - pip install .
