@@ -2,7 +2,7 @@
 SWMM Network Water Quality
 ==========================
 
-.. image:: https://img.shields.io/travis/austinorr/swmmnetwork.svg
+.. image:: https://api.travis-ci.org/austinorr/swmmnetwork.svg?branch=master
         :target: https://travis-ci.org/austinorr/swmmnetwork
 
 .. image:: https://codecov.io/gh/austinorr/swmmnetwork/branch/master/graphs/badge.svg?
