@@ -20,10 +20,15 @@ class TestScenarioHydro(object):
         self.known_proxycol = 'water_lbs'
         self.known_vol_units_output = 'acre-ft'
 
-        self.known_all_nodes = pd.read_csv(
-            data_path('all_nodes.csv'), index_col=[0])
-        self.known_all_edges = pd.read_csv(
-            data_path('all_edges.csv'), index_col=[0])
+        self.known_all_nodes = (
+            pd.read_csv(data_path('all_nodes.csv'), index_col=[0])
+            .pipe(ScenarioHydro._upper_case_index)
+        )
+        self.known_all_edges = (
+            pd.read_csv(data_path('all_edges.csv'), index_col=[0])
+            .pipe(ScenarioHydro._upper_case_index)
+            .pipe(ScenarioHydro._upper_case_column, ['inlet_node', 'outlet_node'])
+        )
 
         self.sh = ScenarioHydro(self.known_inp_path, self.known_rpt_path,
                                 proxycol=self.known_proxycol,

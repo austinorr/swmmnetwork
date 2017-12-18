@@ -4,6 +4,7 @@ from .unit_conversions import convert_units, KNOWN_CONVERSIONS
 
 from hymo import SWMMInpFile, SWMMReportFile
 
+
 class ScenarioHydro(object):
 
     def __init__(self, swmm_inp_path, swmm_rpt_path, proxycol='Pollutant_lbs',
@@ -30,9 +31,57 @@ class ScenarioHydro(object):
         alledges :
         """
 
-        # import hydrology
+        # import hydrology input files and force uppercase for link references
         self.inp = SWMMInpFile(swmm_inp_path)
+        self.inp_subcatchments = (
+            self.inp.subcatchments
+            .pipe(self._upper_case_index)
+            .pipe(self._upper_case_column, ['Outlet'])
+        )
+        self.inp_polygons = (
+            self.inp.polygons
+            .pipe(self._upper_case_index)
+        )
+        self.inp_weirs = (
+            self.inp.weirs
+            .pipe(self._upper_case_index)
+            .pipe(self._upper_case_column, ['From_Node', 'To_Node'])
+        )
+        self.inp_orifices = (
+            self.inp.orifices
+            .pipe(self._upper_case_index)
+            .pipe(self._upper_case_column, ['From_Node', 'To_Node'])
+        )
+        self.inp_conduits = (
+            self.inp.conduits
+            .pipe(self._upper_case_index)
+            .pipe(self._upper_case_column, ['Inlet_Node', 'Outlet_Node'])
+        )
+        self.inp_outlets = (
+            self.inp.outlets
+            .pipe(self._upper_case_index)
+            .pipe(self._upper_case_column, ['Inlet_Node', 'Outlet_Node'])
+        )
+
+        # import hydrology report files and force uppercase for link references
         self.rpt = SWMMReportFile(swmm_rpt_path)
+        self.rpt_link_pollutant_load_results = (
+            self.rpt.link_pollutant_load_results
+            .pipe(self._upper_case_index)
+        )
+        self.rpt_link_flow_results = (
+            self.rpt.link_flow_results
+            .pipe(self._upper_case_index)
+        )
+        self.rpt_subcatchment_runoff_results = (
+            self.rpt.subcatchment_runoff_results
+            .pipe(self._upper_case_index)
+        )
+        self.rpt_node_inflow_results = (
+            self.rpt.node_inflow_results
+            .pipe(self._upper_case_index)
+        )
+
         self.proxycol = proxycol
         self.vol_units_output = vol_units_output
         self.converters = converters
@@ -108,6 +157,21 @@ class ScenarioHydro(object):
         else:
             raise(ValueError)
 
+    @staticmethod
+    def _upper_case_index(df):
+        if len(df) > 0:
+            return df.set_index(df.index.str.upper())
+        else:
+            return df
+
+    @staticmethod
+    def _upper_case_column(df, cols):
+        if isinstance(cols, str):
+            cols = [cols]
+        for col in cols:
+            df[col] = df[col].str.upper()
+        return df
+
     @property
     def pollutant_to_vol(self):
         if self._pollutant_to_vol is None:
@@ -120,9 +184,9 @@ class ScenarioHydro(object):
     def intermediate_link_volume(self):
         if self._intermediate_link_volume is None:
             self._intermediate_link_volume = (
-                self.rpt.link_pollutant_load_results
+                self.rpt_link_pollutant_load_results
                 .mul(self.pollutant_to_vol)
-                .join(self.rpt.link_flow_results.Type)
+                .join(self.rpt_link_flow_results.Type)
                 .rename(columns={self.proxycol: 'converted_vol'})
             )
         return self._intermediate_link_volume
@@ -135,8 +199,8 @@ class ScenarioHydro(object):
     def subcatchments(self):
         if self._subcatchments is None:
             subcatchments = (
-                self.rpt.subcatchment_runoff_results
-                .join(self.inp.subcatchments)
+                self.rpt_subcatchment_runoff_results
+                .join(self.inp_subcatchments)
                 .assign(volume=lambda df: df[self.subcatchment_areacol].astype(numpy.float64) * df[self.subcatchment_depthcol])
                 .assign(unit='acre-in')
                 .pipe(convert_units, 'unit', 'volume', *('acre-in', 'mgal', .32585058 / 12))
@@ -155,7 +219,7 @@ class ScenarioHydro(object):
                 .pipe(self.assign_xtype_volcol, 'dt', 'volume')
                 .assign(Inlet_Node=lambda df: df.index)
                 .assign(id=lambda df: df.index.map(lambda s: '^' + s))
-                .join(self.inp.subcatchments.Outlet)
+                .join(self.inp_subcatchments)
                 .set_index('id')
                 .rename(columns={'Outlet': 'Outlet_Node'})
                 .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
@@ -169,7 +233,7 @@ class ScenarioHydro(object):
         if self._nodes is None:
             # if we want to carry forward the types of nodes, we can fix it
             # here.
-            nodes = (self.rpt.node_inflow_results
+            nodes = (self.rpt_node_inflow_results
                      .pipe(self.assign_xtype_volcol, 'nodes', self.node_volcol)
                      .loc[:, ['xtype', 'volume']]
                      )
@@ -180,8 +244,7 @@ class ScenarioHydro(object):
     def weirs(self):
         if self._weirs is None:
             self._weirs = (
-                self.inp
-                .weirs
+                self.inp_weirs
                 .loc[:, ['From_Node', 'To_Node']]
                 .rename(columns={'From_Node': 'Inlet_Node', 'To_Node': 'Outlet_Node'})
                 .join(self.intermediate_link_volume, how='left')
@@ -195,8 +258,7 @@ class ScenarioHydro(object):
     def orifices(self):
         if self._orifices is None:
             self._orifices = (
-                self.inp
-                .orifices
+                self.inp_orifices
                 .loc[:, ['From_Node', 'To_Node']]
                 .rename(columns={'From_Node': 'Inlet_Node', 'To_Node': 'Outlet_Node'})
                 .join(self.intermediate_link_volume, how='left')
@@ -210,8 +272,7 @@ class ScenarioHydro(object):
     def outlets(self):
         if self._outlets is None:
             self._outlets = (
-                self.inp
-                .outlets
+                self.inp_outlets
                 .loc[:, ['Inlet_Node', 'Outlet_Node']]
                 .join(self.intermediate_link_volume, how='left')
                 .pipe(self.assign_xtype_volcol, 'outlets', 'converted_vol')
@@ -224,8 +285,7 @@ class ScenarioHydro(object):
     def conduits(self):
         if self._conduits is None:
             self._conduits = (
-                self.inp
-                .conduits
+                self.inp_conduits
                 .loc[:, ['Inlet_Node', 'Outlet_Node']]
                 .join(self.intermediate_link_volume, how='left')
                 .pipe(self.assign_xtype_volcol, 'conduits', 'converted_vol')
@@ -293,8 +353,8 @@ class ScenarioHydro(object):
             self.inp
             .coordinates.astype(float)
             .append(
-                self.inp.polygons.astype(float)
-                .groupby(self.inp.polygons.index)
+                self.inp_polygons.astype(float)
+                .groupby(self.inp_polygons.index)
                 .mean())
             .T
             .to_dict('list')
