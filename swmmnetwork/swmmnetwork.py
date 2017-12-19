@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Main module."""
+from __future__ import division
 
 import warnings
 
@@ -354,6 +354,14 @@ def _solve_node(G, node_name, edge_name_col='id', split_on='-',
     return
 
 
+def _find_cycle(G, **kwargs):
+    try:
+        return list(nx.find_cycle(G, **kwargs))
+
+    except nx.exception.NetworkXNoCycle:
+        return []
+
+
 class SwmmNetwork(nx.MultiDiGraph):
     """The SwmmNetwork is initialized by the 'cards' given
     by the SWMM.INP file. This file separates the
@@ -432,16 +440,30 @@ class SwmmNetwork(nx.MultiDiGraph):
 
     def solve_network(self):
 
-        for node in nx.topological_sort(self):
+        simplecycles, findcycles = (
+            list(nx.simple_cycles(self)),  _find_cycle(self)
+        )
 
-            _solve_node(self, node,
-                        edge_name_col=self.edge_name_col,
-                        vol_col=self.vol_col,
-                        ck_vol_col=self.ck_vol_col,
-                        tmnt_flags=self.tmnt_flags,
-                        vol_reduced_flags=self.vol_reduced_flags,
-                        load_cols=self.load_cols,
-                        bmp_performance_mapping_conc=self.bmp_performance_mapping_conc,
-                        split_on=self.split_on
-                        )
+        if simplecycles or findcycles:
+            raise Exception(
+                '\nCannot sort nodes due to network cycle.'
+                '\nThe following nodes form a cycle in the network:'
+                '\nNode Cycles [name]: {}'
+                '\nLink Cycles [(from, to)]: {}'.format(
+                    simplecycles, findcycles)
+            )
+
+        else:
+            for node in nx.topological_sort(self):
+
+                _solve_node(self, node,
+                            edge_name_col=self.edge_name_col,
+                            vol_col=self.vol_col,
+                            ck_vol_col=self.ck_vol_col,
+                            tmnt_flags=self.tmnt_flags,
+                            vol_reduced_flags=self.vol_reduced_flags,
+                            load_cols=self.load_cols,
+                            bmp_performance_mapping_conc=self.bmp_performance_mapping_conc,
+                            split_on=self.split_on
+                            )
         return

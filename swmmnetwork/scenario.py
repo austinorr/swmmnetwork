@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+
+from __future__ import division
+
 import numpy
 import pandas
 from .unit_conversions import convert_units, KNOWN_CONVERSIONS

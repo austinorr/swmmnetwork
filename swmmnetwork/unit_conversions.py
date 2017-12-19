@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+
+from __future__ import division
+
 
 KNOWN_CONVERSIONS = [
     # from, to, factor usage: from * factor = to

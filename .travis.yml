@@ -6,12 +6,12 @@ cache: pip
 
 matrix:
   include:
-    # - python: 2.7
+    # - python: 2.7 #hymo doesn't yet support py27
     #   env:
     #     - COVERAGE=false
     #     - TESTERS="pytest"
     #     - ARGS="--verbose"
-    # - python: 3.4
+    # - python: 3.4 #pandas doesn't support py34
     #   env:
     #     - COVERAGE=false
     #     - TESTERS="pytest"

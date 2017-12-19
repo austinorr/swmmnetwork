@@ -4,6 +4,7 @@ import pytest
 import networkx as nx
 
 from swmmnetwork import SwmmNetwork, sum_edge_attr
+from swmmnetwork.swmmnetwork import _find_cycle
 from .utils import data_path
 
 GT = nx.MultiDiGraph([
@@ -151,3 +152,30 @@ def test_SwmmNetwork(links_and_nodes):
         results.drop('to', axis='columns'),
         known.drop('to', axis='columns')
     )
+
+
+@pytest.mark.parametrize(('G', 'exp'), [
+    (
+        nx.MultiDiGraph([
+            (0, '1'), ('1', '1'), (2, 0)
+        ]), [('1', '1', 0)]
+    ),
+    (
+        nx.MultiDiGraph([
+            (0, '1'), ('1', 0), (2, 0)
+        ]), [(0, '1', 0), ('1', 0, 0)]
+    ),
+    (
+        nx.MultiDiGraph([
+            (0, 1), (1, 1), (2, 0)
+        ]), [(1, 1, 0)]
+    ),
+    (
+        nx.MultiDiGraph([
+            (0, 1), (1, 0), (2, 0)
+        ]), [(0, 1, 0), (1, 0, 0)]
+    ),
+
+])
+def test__find_cycle(G, exp):
+    assert _find_cycle(G) == exp
