@@ -9,6 +9,23 @@ from .unit_conversions import convert_units, KNOWN_CONVERSIONS
 from hymo import SWMMInpFile, SWMMReportFile
 
 
+def _upper_case_index(df):
+    df = df.copy()
+    if len(df) > 0:
+        return df.set_index(df.index.str.upper())
+    else:
+        return df
+
+
+def _upper_case_column(df, cols):
+    df = df.copy()
+    if isinstance(cols, str):
+        cols = [cols]
+    for col in cols:
+        df[col] = df[col].str.upper()
+    return df
+
+
 class ScenarioHydro(object):
 
     def __init__(self, swmm_inp_path, swmm_rpt_path, proxycol='Pollutant_lbs',
@@ -39,51 +56,51 @@ class ScenarioHydro(object):
         self.inp = SWMMInpFile(swmm_inp_path)
         self.inp_subcatchments = (
             self.inp.subcatchments
-            .pipe(self._upper_case_index)
-            .pipe(self._upper_case_column, ['Outlet'])
+            .pipe(_upper_case_index)
+            .pipe(_upper_case_column, ['Outlet'])
         )
         self.inp_polygons = (
             self.inp.polygons
-            .pipe(self._upper_case_index)
+            .pipe(_upper_case_index)
         )
         self.inp_weirs = (
             self.inp.weirs
-            .pipe(self._upper_case_index)
-            .pipe(self._upper_case_column, ['From_Node', 'To_Node'])
+            .pipe(_upper_case_index)
+            .pipe(_upper_case_column, ['From_Node', 'To_Node'])
         )
         self.inp_orifices = (
             self.inp.orifices
-            .pipe(self._upper_case_index)
-            .pipe(self._upper_case_column, ['From_Node', 'To_Node'])
+            .pipe(_upper_case_index)
+            .pipe(_upper_case_column, ['From_Node', 'To_Node'])
         )
         self.inp_conduits = (
             self.inp.conduits
-            .pipe(self._upper_case_index)
-            .pipe(self._upper_case_column, ['Inlet_Node', 'Outlet_Node'])
+            .pipe(_upper_case_index)
+            .pipe(_upper_case_column, ['Inlet_Node', 'Outlet_Node'])
         )
         self.inp_outlets = (
             self.inp.outlets
-            .pipe(self._upper_case_index)
-            .pipe(self._upper_case_column, ['Inlet_Node', 'Outlet_Node'])
+            .pipe(_upper_case_index)
+            .pipe(_upper_case_column, ['Inlet_Node', 'Outlet_Node'])
         )
 
         # import hydrology report files and force uppercase for link references
         self.rpt = SWMMReportFile(swmm_rpt_path)
         self.rpt_link_pollutant_load_results = (
             self.rpt.link_pollutant_load_results
-            .pipe(self._upper_case_index)
+            .pipe(_upper_case_index)
         )
         self.rpt_link_flow_results = (
             self.rpt.link_flow_results
-            .pipe(self._upper_case_index)
+            .pipe(_upper_case_index)
         )
         self.rpt_subcatchment_runoff_results = (
             self.rpt.subcatchment_runoff_results
-            .pipe(self._upper_case_index)
+            .pipe(_upper_case_index)
         )
         self.rpt_node_inflow_results = (
             self.rpt.node_inflow_results
-            .pipe(self._upper_case_index)
+            .pipe(_upper_case_index)
         )
 
         self.proxycol = proxycol
@@ -160,21 +177,6 @@ class ScenarioHydro(object):
             return mgL_to_lbsgal * gal_to_mgal
         else:
             raise(ValueError)
-
-    @staticmethod
-    def _upper_case_index(df):
-        if len(df) > 0:
-            return df.set_index(df.index.str.upper())
-        else:
-            return df
-
-    @staticmethod
-    def _upper_case_column(df, cols):
-        if isinstance(cols, str):
-            cols = [cols]
-        for col in cols:
-            df[col] = df[col].str.upper()
-        return df
 
     @property
     def pollutant_to_vol(self):
@@ -546,6 +548,7 @@ class ScenarioLoading(object):
         if self._load is None:
             load = (
                 self.raw_load
+                .pipe(_upper_case_column, self._subcatchment_col)
                 .rename(columns={
                     self._wq_value_col: 'load',
                     self._subcatchment_col: 'subcatchment',
@@ -562,6 +565,7 @@ class ScenarioLoading(object):
         if self._concentration is None:
             concentration = (
                 self.raw_concentration
+                .pipe(_upper_case_column, self._subcatchment_col)
                 .rename(columns={
                     self._wq_value_col: 'concentration',
                     self._subcatchment_col: 'subcatchment',
