@@ -10,19 +10,38 @@ from hymo import SWMMInpFile, SWMMReportFile
 
 
 def _upper_case_index(df):
-    df = df.copy()
-    if len(df) > 0:
-        return df.set_index(df.index.str.upper())
-    else:
+    """Converts a pandas.DataFrame.index to an uppercase string
+    """
+    if len(df) == 0:
         return df
+
+    df = df.copy()
+    df.index = df.index.map(str).str.upper()
+    return df
 
 
 def _upper_case_column(df, cols):
+    """Converts contents of pandas.Series to uppercase string
+
+    Parameters
+    ----------
+    df : pandas.DataFrame()
+    cols : string or list
+        column names that will be converted to uppercase
+
+    Returns
+    -------
+    pandas.DataFrame()
+    """
+    if len(df) == 0:
+        return df
+
     df = df.copy()
     if isinstance(cols, str):
         cols = [cols]
     for col in cols:
-        df[col] = df[col].str.upper()
+        if col in df.columns:
+            df[col] = df[col].map(str).str.upper()
     return df
 
 
