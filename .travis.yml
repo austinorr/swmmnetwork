@@ -6,23 +6,32 @@ cache: pip
 
 matrix:
   include:
-    # - python: 2.7 #hymo doesn't yet support py27
-    #   env:
-    #     - COVERAGE=false
-    #     - TESTERS="pytest"
-    #     - ARGS="--verbose"
-    # - python: 3.4 #pandas doesn't support py34
+    # - python: 2.7 # hymo doesn't yet support py27
     #   env:
     #     - COVERAGE=false
     #     - TESTERS="pytest"
     #     - ARGS="--verbose"
     - python: 3.5
       env:
+        - NXVERSION="networkx=1.11"
+        - COVERAGE=false
+        - TESTERS="pytest"
+        - ARGS="--verbose"
+    - python: 3.6
+      env:
+        - NXVERSION="networkx=1.11"
+        - COVERAGE=false
+        - TESTERS="pytest"
+        - ARGS="--verbose"
+    - python: 3.5
+      env:
+        - NXVERSION="networkx"
         - COVERAGE=true
         - TESTERS="pytest coverage"
         - ARGS="--verbose"
     - python: 3.6
       env:
+        - NXVERSION="networkx"
         - COVERAGE=false
         - TESTERS="pytest"
         - ARGS="--verbose"
@@ -42,8 +51,8 @@ before_install:
 install:
   - conda create --yes -n test python=$TRAVIS_PYTHON_VERSION numpy pandas
   - source activate test
-  - conda install --yes --channel=conda-forge ${TESTERS} networkx>=1.11
-  - pip install codecov
+  - conda install --yes --channel=conda-forge ${TESTERS} ${NXVERSION}
+  - pip install codecov pint==0.8.1
   - pip install git+https://github.com/lucashtnguyen/hymo.git
   - pip install .
 

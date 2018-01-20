@@ -28,9 +28,10 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 requirements = [
-    'networkx>=1.11,<2',
+    'networkx',
     'pandas',
     'numpy',
+    'pint==0.8.1',
 ]
 
 test_requirements = [

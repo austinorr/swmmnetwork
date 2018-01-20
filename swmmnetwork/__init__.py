@@ -4,8 +4,15 @@
 
 __author__ = 'Austin Orr'
 __email__ = 'austinmartinorr@gmail.com'
-__version__ = '0.1.3'
+__version__ = '0.2.0'
 
-from .swmmnetwork import SwmmNetwork, sum_edge_attr
-from .scenario import ScenarioHydro, ScenarioLoading
+from .swmmnetwork import SwmmNetwork
+from .convert import (
+    from_swmm_inp,
+    add_edges_from_swmm_inp,
+    pandas_edgelist_from_swmm_inp,
+    pandas_edgelist_to_edgelist,
+    pandas_node_attrs_from_swmm_inp,
+)
+from .scenario import Scenario, ScenarioLoading
 from .tests import test

@@ -3,8 +3,10 @@ import pytest
 
 import networkx as nx
 
-from swmmnetwork import SwmmNetwork, sum_edge_attr
-from swmmnetwork.swmmnetwork import _find_cycle
+from swmmnetwork import SwmmNetwork
+from swmmnetwork.core import _sum_edge_attr
+from swmmnetwork.convert import network_to_df
+
 from .utils import data_path
 
 GT = nx.MultiDiGraph([
@@ -69,7 +71,7 @@ flow direction is top to bottom
                            include_filter_flags=['C', '1'], exclude_filter_flags=None), 7),
 ])
 def test_sum_edge_attr(G, node, attr, dct, exp):
-    assert sum_edge_attr(G, node, attr, **dct) == exp
+    assert _sum_edge_attr(G, node, attr, **dct) == exp
 
 
 @pytest.fixture
@@ -137,45 +139,28 @@ def test_SwmmNetwork(links_and_nodes):
 
     l, s = links_and_nodes
 
-    G = SwmmNetwork(
+    G = SwmmNetwork()
+    G.add_edges_from(l)
+    G.add_nodes_from(s)
+    G.solve_network(
         load_cols='load1',
         tmnt_flags=['TR'],
         vol_reduced_flags=['INF'],
-        bmp_performance_mapping_conc=bmp_performance_mapping_conc,
-    )
-    G.add_edges_from(l)
-    G.add_nodes_from(s)
-    results = G.results
+        bmp_performance_mapping_conc=bmp_performance_mapping_conc)
 
+    results = G.to_dataframe(index_col='id')
     known = pandas.read_csv(data_path('test_full_network.csv'), index_col=[0])
     pandas.testing.assert_frame_equal(
-        results.drop('to', axis='columns'),
-        known.drop('to', axis='columns')
+        results.drop(['to','_bmp_tmnt_flag'], axis='columns'),
+        known.drop(['to','_bmp_tmnt_flag'], axis='columns')
     )
 
+def test_SwmmNetwork2():
+    inp_path = data_path('test.inp')
+    G = SwmmNetwork.from_swmm_inp(inp_path)
+    assert len(G) > 0
 
-@pytest.mark.parametrize(('G', 'exp'), [
-    (
-        nx.MultiDiGraph([
-            (0, '1'), ('1', '1'), (2, 0)
-        ]), [('1', '1', 0)]
-    ),
-    (
-        nx.MultiDiGraph([
-            (0, '1'), ('1', 0), (2, 0)
-        ]), [(0, '1', 0), ('1', 0, 0)]
-    ),
-    (
-        nx.MultiDiGraph([
-            (0, 1), (1, 1), (2, 0)
-        ]), [(1, 1, 0)]
-    ),
-    (
-        nx.MultiDiGraph([
-            (0, 1), (1, 0), (2, 0)
-        ]), [(0, 1, 0), (1, 0, 0)]
-    ),
+    G = SwmmNetwork()
+    G.add_edges_from_swmm_inp(inp_path)
+    assert len(G) > 0
 
-])
-def test__find_cycle(G, exp):
-    assert _find_cycle(G) == exp
