@@ -4,11 +4,7 @@ import networkx as nx
 
 import hymo
 
-from .util import (
-    _upper_case_index,
-    _upper_case_column,
-    _validate_hymo_inp,
-    )
+from .util import _upper_case_column, _validate_hymo_inp
 from .compat import from_pandas_edgelist, set_node_attributes
 
 
@@ -65,7 +61,7 @@ def network_to_df(G, index_col=None):
     if index_col is not None:
         df = df.set_index(index_col)
         df.index = df.index.map(str)
-        return (df.sort_index())
+        df = df.sort_index()
     return df
 
 
@@ -76,8 +72,7 @@ def pandas_edgelist_from_swmm_inp(inp):
 
     catchment_links = (
         inp.subcatchments
-        .pipe(_upper_case_index)
-        .pipe(_upper_case_column, ['Outlet'])
+        .pipe(_upper_case_column, cols='Outlet', include_index=True)
         .assign(Inlet_Node=lambda df: df.index)
         .assign(id=lambda df: df.index.map(lambda s: '^' + s))
         .assign(xtype='dt')
@@ -95,8 +90,7 @@ def pandas_edgelist_from_swmm_inp(inp):
             df = (
                 df
                 .rename(columns={'From_Node': 'Inlet_Node', 'To_Node': 'Outlet_Node'})
-                .pipe(_upper_case_index)
-                .pipe(_upper_case_column, ['Inlet_Node', 'Outlet_Node'])
+                .pipe(_upper_case_column, cols=['Inlet_Node', 'Outlet_Node'], include_index=True)
                 .loc[:, ['Inlet_Node', 'Outlet_Node']]
                 .assign(id=lambda df: df.index)
                 .assign(xtype=xtype if xtype[-1] != 's' else xtype[:-1])
@@ -125,6 +119,11 @@ def pandas_edgelist_to_edgelist(df, source='source', target='target', cols=None)
     return edge_list
 
 
+def pandas_nodelist_to_nodelist(df):
+
+    return list(df.to_dict('index').items())
+
+
 def pandas_node_attrs_from_swmm_inp(inp):
     """
     """
@@ -138,9 +137,9 @@ def pandas_node_attrs_from_swmm_inp(inp):
         if df is not None:
             df = (
                 df
-                .pipe(_upper_case_index)
+                .pipe(_upper_case_column, include_index=True)
                 .assign(xtype=xtype if xtype[-1] != 's' else xtype[:-1])
-                .loc[:, [ 'xtype']]
+                .loc[:, ['xtype']]
                 .rename(columns=lambda s: s.lower())
             )
             node_dfs.append(df)
@@ -155,8 +154,6 @@ def add_edges_from_swmm_inp(G, inp):
     ----------
     G : nx.Graph-like object
     inp : file_path or hymo.SWMMInpFile
-
-
     """
 
     inp = _validate_hymo_inp(inp)
@@ -215,14 +212,26 @@ def from_swmm_inp(inp, create_using=None):
     return G
 
 
-def inp_layout(inp):
-    """
+def swmm_inp_layout_to_pos(inp):
+    """Reads and converts swmm node coordinates and subcatchment from inp
+    file to networkx drawing `pos` format, i.e., a dict of node names with
+    x, y coordinates as values.
+    Parameters
+    ----------
+    inp : string or hymo.SwmmInputFile
+        this file will be read to pull the node coordinates and subcatchment
+        positions. Polygons are converted to coordinate pairs through their
+        centroid.
+
+    Returns
+    -------
+    dict suitable for use as the `pos` kwarg of networkx drawing methods.
     """
 
     inp = _validate_hymo_inp(inp)
 
-    coords = inp.coordinates.pipe(_upper_case_index)
-    polys = inp.polygons.pipe(_upper_case_index)
+    coords = inp.coordinates.pipe(_upper_case_column, include_index=True)
+    polys = inp.polygons.pipe(_upper_case_column, include_index=True)
 
     pos = (
         coords

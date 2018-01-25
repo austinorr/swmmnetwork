@@ -8,8 +8,8 @@ import pytest
 import pandas as pd
 import pandas.util.testing as pdtest
 
-from swmmnetwork.scenario import ScenarioLoading, Scenario
-from swmmnetwork.scenario import _upper_case_index, _upper_case_column
+from swmmnetwork.scenario import Scenario #, ScenarioLoading,
+from swmmnetwork.util import _upper_case_column
 from swmmnetwork.scenario import load_rpt_link_flows
 from .utils import data_path
 
@@ -57,16 +57,14 @@ class TestScenario(object):
         self.known_inp_path = data_path('test.inp')
         self.known_rpt_path = data_path('test.rpt')
         self.known_proxycol = 'water'
-        # self.known_vol_units_output = 'acre-ft'
 
         self.known_all_nodes = (
             pd.read_csv(data_path('all_nodes.csv'), index_col=[0])
-            .pipe(_upper_case_index)
+            .pipe(_upper_case_column, include_index=True)
         )
         self.known_all_edges = (
             pd.read_csv(data_path('all_edges.csv'), index_col=[0])
-            .pipe(_upper_case_index)
-            .pipe(_upper_case_column, ['inlet_node', 'outlet_node'])
+            .pipe(_upper_case_column, cols=['inlet_node', 'outlet_node'], include_index=True)
         )
 
         self.sh = Scenario(self.known_inp_path,
@@ -111,53 +109,53 @@ class TestScenario(object):
         )
 
 
-class TestScenarioLoading(object):
+# class TestScenarioLoading(object):
 
-    def setup(self):
-        self.known_all_nodes = pd.read_csv(
-            data_path('all_nodes.csv'), index_col=[0])
-        self.known_all_edges = pd.read_csv(
-            data_path('all_edges.csv'), index_col=[0])
-        self.known_edges_vol = pd.read_csv(
-            data_path('edges_vol.csv'), index_col=[0])
-        self.known_conc = pd.read_csv(data_path('conc.csv'))
+#     def setup(self):
+#         self.known_all_nodes = pd.read_csv(
+#             data_path('all_nodes.csv'), index_col=[0])
+#         self.known_all_edges = pd.read_csv(
+#             data_path('all_edges.csv'), index_col=[0])
+#         self.known_edges_vol = pd.read_csv(
+#             data_path('edges_vol.csv'), index_col=[0])
+#         self.known_conc = pd.read_csv(data_path('conc.csv'))
 
-        self.sl = ScenarioLoading(self.known_all_nodes, self.known_all_edges,
-                                  conc=self.known_conc, wq_value_col='concentration'
-                                  )
+#         self.sl = ScenarioLoading(self.known_all_nodes, self.known_all_edges,
+#                                   conc=self.known_conc, wq_value_col='concentration'
+#                                   )
 
-    def teardown(self):
-        None
+#     def teardown(self):
+#         None
 
-    def test_attributes(self):
-        assert hasattr(self.sl, '_wq_value_col')
-        assert hasattr(self.sl, '_subcatchment_col')
-        assert hasattr(self.sl, '_pollutant_col')
-        assert hasattr(self.sl, '_wq_unit_col')
-        assert hasattr(self.sl, '_xtype_col')
-        assert hasattr(self.sl, '_volume_val_col')
-        assert hasattr(self.sl, '_vol_unit_col')
-        assert hasattr(self.sl, '_inlet_col')
-        assert hasattr(self.sl, '_outlet_col')
-        assert hasattr(self.sl, 'raw_nodes_vol')
-        assert hasattr(self.sl, 'raw_edges_vol')
-        assert hasattr(self.sl, 'nodes_vol')
-        assert hasattr(self.sl, 'edges_vol')
-        assert hasattr(self.sl, 'raw_load')
-        assert hasattr(self.sl, 'raw_concentration')
-        assert hasattr(self.sl, 'concentration')
-        assert hasattr(self.sl, 'load')
+#     def test_attributes(self):
+#         assert hasattr(self.sl, '_wq_value_col')
+#         assert hasattr(self.sl, '_subcatchment_col')
+#         assert hasattr(self.sl, '_pollutant_col')
+#         assert hasattr(self.sl, '_wq_unit_col')
+#         assert hasattr(self.sl, '_xtype_col')
+#         assert hasattr(self.sl, '_volume_val_col')
+#         assert hasattr(self.sl, '_vol_unit_col')
+#         assert hasattr(self.sl, '_inlet_col')
+#         assert hasattr(self.sl, '_outlet_col')
+#         assert hasattr(self.sl, 'raw_nodes_vol')
+#         assert hasattr(self.sl, 'raw_edges_vol')
+#         assert hasattr(self.sl, 'nodes_vol')
+#         assert hasattr(self.sl, 'edges_vol')
+#         assert hasattr(self.sl, 'raw_load')
+#         assert hasattr(self.sl, 'raw_concentration')
+#         assert hasattr(self.sl, 'concentration')
+#         assert hasattr(self.sl, 'load')
 
-    def test_edges_vol(self):
-        pdtest.assert_frame_equal(
-            self.sl.edges_vol,
-            self.known_edges_vol
-        )
+#     def test_edges_vol(self):
+#         pdtest.assert_frame_equal(
+#             self.sl.edges_vol,
+#             self.known_edges_vol
+#         )
 
-    def test_load(self):
-        # currently the returned df has null values.
-        # is this right?
-        None
+#     def test_load(self):
+#         # currently the returned df has null values.
+#         # is this right?
+#         None
 
 """
 class TestScenarioHydro(object):
