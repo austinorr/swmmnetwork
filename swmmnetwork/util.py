@@ -34,28 +34,20 @@ def validate_swmmnetwork(G):
                 simplecycles, findcycles)
         )
         raise Exception(e)
+
     return
 
 
-def _upper_case_index(df):
-    """Converts a pandas.DataFrame.index to an uppercase string
-    """
-    if len(df) == 0:
-        return df
-
-    df = df.copy()
-    df.index = df.index.map(str).str.upper()
-    return df
-
-
-def _upper_case_column(df, cols):
+def _upper_case_column(df, cols=None, include_index=False):
     """Converts contents of pandas.Series to uppercase string
 
     Parameters
     ----------
     df : pandas.DataFrame()
-    cols : string or list
+    cols : string or list, optional (default=None)
         column names that will be converted to uppercase
+    unclude_index : bool, optional (default=False)
+        whether to convert the index to an uppercase string
 
     Returns
     -------
@@ -65,11 +57,18 @@ def _upper_case_column(df, cols):
         return df
 
     df = df.copy()
-    if isinstance(cols, str):
-        cols = [cols]
-    for col in cols:
-        if col in df.columns:
-            df[col] = df[col].map(str).str.upper()
+
+    if cols is not None:
+        if isinstance(cols, str):
+            cols = [cols]
+
+        for col in cols:
+            if col in df.columns:
+                df[col] = df[col].map(str).str.upper()
+
+    if include_index:
+        df.index = df.index.map(str).str.upper()
+
     return df
 
 
@@ -107,6 +106,6 @@ def _to_list(val):
     try:
         assert isinstance(val, list)
     except:
-        raise TypeError('Pass {} as a list.'.format(name))
+        raise TypeError('Pass {} as a list.'.format(val))
 
     return val

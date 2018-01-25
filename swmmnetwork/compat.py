@@ -6,13 +6,14 @@ if nx.__version__ >= '2':
     from_pandas_edgelist = nx.from_pandas_edgelist
     set_node_attributes = nx.set_node_attributes
 
-else: # pragma: no cover
+else:  # pragma: no cover
     from networkx.convert import _prep_create_using
 
-    # this code is slightly modified from the source code for NetworkX version 2.0
+    # this code is slightly modified from the source code for NetworkX version
+    # 2.0
 
-    def from_pandas_edgelist(df, source='source', target='target', edge_attr=None,
-                             create_using=None):
+    def from_pandas_edgelist(df, source='source', target='target',
+                             edge_attr=None, create_using=None):
         """Return a graph from Pandas DataFrame containing an edge list.
 
         The Pandas DataFrame should contain at least two columns of node names and

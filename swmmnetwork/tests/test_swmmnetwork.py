@@ -124,7 +124,8 @@ def links_and_nodes():
     return l, s
 
 
-def test_SwmmNetwork(links_and_nodes):
+@pytest.fixture
+def SN(links_and_nodes):
     bmp_performance_mapping_conc = {
         "BR": {
             "load1": lambda x: .2 * x  # 80% reduced
@@ -148,14 +149,38 @@ def test_SwmmNetwork(links_and_nodes):
         vol_reduced_flags=['INF'],
         bmp_performance_mapping_conc=bmp_performance_mapping_conc)
 
+    return G
+
+
+def test_SwmmNetwork_no_mutation(SN, links_and_nodes):
+    G = SN
+    l, s = links_and_nodes
+
+    # check that all of the original node attributes have not been mutated.
+    for node, data in s:
+        for k, v in data.items():
+            assert G.node[node][k] == v
+
+    # check that all of the original edge attributes have not been mutated.
+    for edge_f, edge_to, data in l:
+        matches = filter(lambda x: x[2]['id'] == data['id'],
+                         G.edges([edge_f, edge_to], data=True))
+        _from, _to, _data = list(matches)[0]
+        for k, v in data.items():
+            assert _data[k] == v
+
+
+def test_SwmmNetwork_results(SN):
+    G = SN
     results = G.to_dataframe(index_col='id')
     known = pandas.read_csv(data_path('test_full_network.csv'), index_col=[0])
     pandas.testing.assert_frame_equal(
-        results.drop(['to','_bmp_tmnt_flag'], axis='columns'),
-        known.drop(['to','_bmp_tmnt_flag'], axis='columns')
+        results.drop(['to', '_bmp_tmnt_flag'], axis='columns'),
+        known.drop(['to', '_bmp_tmnt_flag'], axis='columns')
     )
 
-def test_SwmmNetwork2():
+
+def test_SwmmNetwork_constructors():
     inp_path = data_path('test.inp')
     G = SwmmNetwork.from_swmm_inp(inp_path)
     assert len(G) > 0
@@ -163,4 +188,3 @@ def test_SwmmNetwork2():
     G = SwmmNetwork()
     G.add_edges_from_swmm_inp(inp_path)
     assert len(G) > 0
-

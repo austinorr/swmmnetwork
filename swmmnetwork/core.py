@@ -1,5 +1,6 @@
+from __future__ import division
+
 import warnings
-from collections import OrderedDict
 
 import pandas
 import networkx as nx
@@ -115,12 +116,12 @@ def solve_node(G, node_name, edge_name_col='id', split_on='-',
         on the `G` graph object to retrieve results.
     '''
 
-    if load_cols is None:
-        load_cols = []
-    if tmnt_flags is None:
-        tmnt_flags = []
-    if vol_reduced_flags is None:
-        vol_reduced_flags = []
+    node_obj = G.node[node_name]
+
+    load_cols = _to_list(load_cols)
+    tmnt_flags = _to_list(tmnt_flags)
+    vol_reduced_flags = _to_list(vol_reduced_flags)
+
     if bmp_performance_mapping_conc is None:
         bmp_performance_mapping_conc = {}
 
@@ -139,7 +140,7 @@ def solve_node(G, node_name, edge_name_col='id', split_on='-',
 
     # subcatchments have no volume from in_edges, but they do have a
     # node_vol.
-    node_vol = G.node[node_name].get(vol_col, 0)
+    node_vol = node_obj.get(vol_col, 0)
 
     edge_vol_in = _sum_edge_attr(
         G, node_name, vol_col, method='in_edges', split_on=split_on)
@@ -164,15 +165,15 @@ def solve_node(G, node_name, edge_name_col='id', split_on='-',
 
     if ck_vol_col is not None:
         vol_diff_ck_col = vol_col + "_diff_ck"
-        ck_vol = G.node[node_name].get(ck_vol_col, node_vol)
+        ck_vol = node_obj.get(ck_vol_col, node_vol)
         vol_diff_ck = vol_in - ck_vol
-        G.node[node_name][vol_diff_ck_col] = vol_diff_ck
+        node_obj[vol_diff_ck_col] = vol_diff_ck
 
     vol_in = node_vol + edge_vol_in
 
-    G.node[node_name][vol_in_col] = vol_in
-    G.node[node_name][vol_out_col] = edge_vol_out
-    G.node[node_name][vol_gain_col] = edge_vol_out - edge_vol_in
+    node_obj[vol_in_col] = vol_in
+    node_obj[vol_out_col] = edge_vol_out
+    node_obj[vol_gain_col] = edge_vol_out - edge_vol_in
     # Negative values in this field
     # indicate internal node losses. There should
     # be a load reduction here if there is load in the inflow.
@@ -181,18 +182,18 @@ def solve_node(G, node_name, edge_name_col='id', split_on='-',
     vol_captured = vol_treated + vol_reduced
 
     # assign node vol attributes
-    G.node[node_name][vol_eff_col] = vol_eff
+    node_obj[vol_eff_col] = vol_eff
 
-    G.node[node_name][vol_red_col] = vol_reduced
-    G.node[node_name][pct_vol_red_col] = 100 * \
+    node_obj[vol_red_col] = vol_reduced
+    node_obj[pct_vol_red_col] = 100 * \
         _safe_divide(vol_reduced, vol_in)
 
-    G.node[node_name][vol_tmnt_col] = vol_treated
-    G.node[node_name][pct_vol_tmnt_col] = 100 * \
+    node_obj[vol_tmnt_col] = vol_treated
+    node_obj[pct_vol_tmnt_col] = 100 * \
         _safe_divide(vol_treated, vol_in)
 
-    G.node[node_name][vol_cap_col] = vol_captured
-    G.node[node_name][pct_vol_cap_col] = 100 * \
+    node_obj[vol_cap_col] = vol_captured
+    node_obj[pct_vol_cap_col] = 100 * \
         _safe_divide(vol_captured, vol_in)
 
     #-----solve volume weighted loads-----#
@@ -207,13 +208,14 @@ def solve_node(G, node_name, edge_name_col='id', split_on='-',
         conc_eff_col = load_col + '_conc_eff'
         pct_conc_red_col = load_col + '_conc_pct_reduced'
 
-        # all nodes except subcatchments should return zero here.
-        node_load = G.node[node_name].get(load_col, 0)
+        # all nodes except pollutant sources (typically subcatchments)
+        # should return zero here.
+        node_load = node_obj.get(load_col, 0)
 
         node_load_in = _sum_edge_attr(G, node_name, load_eff_col,
                                       method='in_edges', split_on=split_on) + node_load
 
-        G.node[node_name][load_in_col] = node_load_in
+        node_obj[load_in_col] = node_load_in
 
         if vol_in > 0 and node_load_in > 0:  # skip the math if it's unnecessary
 
@@ -261,9 +263,9 @@ def solve_node(G, node_name, edge_name_col='id', split_on='-',
                                     flag = '_no_tmnt_fxn'
 
                                 if data.get('_bmp_tmnt_flag') is None:
-                                    data['_bmp_tmnt_flag'] = OrderedDict()
+                                    data['_bmp_tmnt_flag'] = {}
                                 if data['_bmp_tmnt_flag'].get(flag) is None:
-                                    data['_bmp_tmnt_flag'].update({flag:[]})
+                                    data['_bmp_tmnt_flag'].update({flag: []})
                                 data['_bmp_tmnt_flag'][flag].append(load_col)
 
                                 link_conc_eff = fxn(node_conc_in)
@@ -294,25 +296,25 @@ def solve_node(G, node_name, edge_name_col='id', split_on='-',
             node_conc_eff = 0
 
         # assign node load and concentration attributes
-        G.node[node_name][conc_in_col] = node_conc_in
-        G.node[node_name][conc_eff_col] = node_conc_eff
-        G.node[node_name][pct_conc_red_col] = 100 * \
+        node_obj[conc_in_col] = node_conc_in
+        node_obj[conc_eff_col] = node_conc_eff
+        node_obj[pct_conc_red_col] = 100 * \
             _safe_divide((node_conc_in - node_conc_eff), node_conc_in)
 
         node_load_reduced = node_load_in - node_load_eff
 
-        G.node[node_name][load_eff_col] = node_load_eff
-        G.node[node_name][load_red_col] = node_load_reduced
-        G.node[node_name][pct_load_red_col] = 100 * \
+        node_obj[load_eff_col] = node_load_eff
+        node_obj[load_red_col] = node_load_reduced
+        node_obj[pct_load_red_col] = 100 * \
             _safe_divide(node_load_reduced, node_load_in)
 
     return
 
 
 def solve_network(G, edge_name_col='id', split_on='-',
-                  vol_col='volume', ck_vol_col=None, tmnt_flags=None,
-                  vol_reduced_flags=None, load_cols=None,
-                  bmp_performance_mapping_conc=None):
+                  vol_col='volume', tmnt_flags=['TR'],
+                  vol_reduced_flags=['INF'], ck_vol_col=None,
+                  load_cols=None, bmp_performance_mapping_conc=None):
 
     validate_swmmnetwork(G)
 
@@ -324,17 +326,15 @@ def solve_network(G, edge_name_col='id', split_on='-',
         bmp_performance_mapping_conc = {}
 
     for node in nx.topological_sort(G):
-        solve_node(
-            G,
-            node,
-            edge_name_col=edge_name_col,
-            vol_col=vol_col,
-            ck_vol_col=ck_vol_col,
-            tmnt_flags=tmnt_flags,
-            vol_reduced_flags=vol_reduced_flags,
-            load_cols=load_cols,
-            bmp_performance_mapping_conc=bmp_performance_mapping_conc,
-            split_on=split_on,
-        )
+        solve_node(G, node,
+                   edge_name_col=edge_name_col,
+                   split_on=split_on,
+                   vol_col=vol_col,
+                   tmnt_flags=tmnt_flags,
+                   vol_reduced_flags=vol_reduced_flags,
+                   ck_vol_col=ck_vol_col,
+                   load_cols=load_cols,
+                   bmp_performance_mapping_conc=bmp_performance_mapping_conc,
+                   )
 
     return

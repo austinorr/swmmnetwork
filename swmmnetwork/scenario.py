@@ -7,24 +7,23 @@ import pandas
 
 from hymo import SWMMInpFile, SWMMReportFile
 
-# from .unit_conversions import convert_units, KNOWN_CONVERSIONS
-from .unit_conversions import Converters
-
+from .unit_conversions import UnitConverter
 from . import convert
 from .util import (
-    _upper_case_index,
     _upper_case_column,
     _validate_hymo_inp,
     _validate_hymo_rpt,
 )
 
-converter = Converters()
 
-
-def load_rpt_link_flows(df, proxy_keyword, conc_val, conc_unit, out_unit):
+def load_rpt_link_flows(df, proxy_keyword, conc_val, conc_unit,
+                        out_unit, unit_converter=None):
+    if unit_converter is None:
+        unit_converter = UnitConverter()
 
     proxy_cols = list(
-        filter(lambda c: proxy_keyword.lower() in c.lower(), df.columns))
+        filter(lambda c: proxy_keyword.lower() in c.lower(), df.columns)
+    )
 
     if len(proxy_cols) > 1 or 0:
         e = ("ERROR: The keyword '{}' is either missing or is not unique "
@@ -35,12 +34,16 @@ def load_rpt_link_flows(df, proxy_keyword, conc_val, conc_unit, out_unit):
 
     proxy_col = proxy_cols[0]
     in_unit = proxy_col.split('_')[-1]
-    conversion = converter.proxy_link_flow_conversion_factor(
-        in_unit, conc_val, conc_unit, out_unit)
+
+    _in_unit, _conc_unit, _out_unit = [unit_converter.pint_alias.get(i, i)
+                                       for i in [in_unit, conc_unit, out_unit]]
+
+    conversion = (1 * unit_converter.ureg(_in_unit) /
+                  (conc_val * unit_converter.ureg(_conc_unit))).to(_out_unit).m
 
     res = (
         df
-        .pipe(_upper_case_index)
+        .pipe(_upper_case_column, include_index=True)
         .assign(volume=lambda df: df[proxy_col] * conversion)
         .assign(unit=out_unit)
     )
@@ -48,15 +51,20 @@ def load_rpt_link_flows(df, proxy_keyword, conc_val, conc_unit, out_unit):
     return res
 
 
-def load_rpt_subcatchment_vol(df, area_col, area_unit,
-                              depth_col, depth_unit, out_unit):
+def load_rpt_subcatchment_vol(df, area_col, area_unit, depth_col,
+                              depth_unit, out_unit, unit_converter=None):
+    if unit_converter is None:
+        unit_converter = UnitConverter()
 
-    conversion = converter.subcatchment_flow_conversion_factor(
-        area_unit, depth_unit, out_unit)
+    _area_unit, _depth_unit, _out_unit = [unit_converter.pint_alias.get(i, i)
+                                          for i in [area_unit, depth_unit, out_unit]]
+
+    conversion = (1 * unit_converter.ureg(_area_unit) *
+                  unit_converter.ureg(_depth_unit)).to(_out_unit).m
 
     res = (
         df
-        .pipe(_upper_case_index)
+        .pipe(_upper_case_column, include_index=True)
         .assign(volume=lambda df:
                 df[area_col].astype(float) * df[depth_col].astype(float) * conversion)
         .assign(unit=out_unit)
@@ -65,14 +73,19 @@ def load_rpt_subcatchment_vol(df, area_col, area_unit,
     return res
 
 
-def load_rpt_node_inflow_vol(df, vol_value_col, vol_unit, out_unit):
+def load_rpt_node_inflow_vol(df, vol_value_col, vol_unit,
+                             out_unit, unit_converter=None):
+    if unit_converter is None:
+        unit_converter = UnitConverter()
 
-    conversion = converter.node_volume_conversion_factor(
-        vol_unit, out_unit)
+    _vol_unit, _out_unit = [unit_converter.pint_alias.get(i, i)
+                            for i in [vol_unit, out_unit]]
+
+    conversion = (1 * unit_converter.ureg(_vol_unit)).to(_out_unit).m
 
     res = (
         df
-        .pipe(_upper_case_index)
+        .pipe(_upper_case_column, include_index=True)
         .assign(volume=lambda df: df[vol_value_col] * conversion)
         .assign(unit=out_unit)
     )
@@ -80,31 +93,44 @@ def load_rpt_node_inflow_vol(df, vol_value_col, vol_unit, out_unit):
     return res
 
 
-class Scenario(object):
+class ScenarioBase(object):
 
-    def __init__(self, swmm_inp_path, swmm_rpt_path, proxy_keyword=None):
+    def __init__(self, swmm_inp_path=None,
+                 swmm_rpt_path=None, proxy_keyword=None,
+                 unit_converter=None):
 
-        self.inp = _validate_hymo_inp(swmm_inp_path)
-        self.rpt = _validate_hymo_rpt(swmm_rpt_path)
-        if proxy_keyword is None:
-            proxy_keyword = 'water'
+        self.swmm_inp_path = swmm_inp_path
+        self.swmm_rpt_path = swmm_rpt_path
         self.proxy_keyword = proxy_keyword
 
-        self._rpt_flow_unit = self.rpt.unit
-        self._inp_flow_unit = self.inp.options.loc['FLOW_UNITS'].values[0]
+        if self.swmm_inp_path is not None:
+            self.inp = _validate_hymo_inp(swmm_inp_path)
+            self.flow_unit = self.inp.options.loc['FLOW_UNITS'].values[0]
 
-        # import link volume tracking proxy pollutant
-        self.proxy_conc_unit = self.inp.pollutants.Units.values[0]
-        self.proxy_pollutant_conc = float(self.inp.pollutants.Crain.values[0])
+            # import link volume tracking proxy pollutant
+            self.proxy_conc_unit = self.inp.pollutants.Units.values[0]
+            self.proxy_pollutant_conc = float(
+                self.inp.pollutants.Crain.values[0])
 
-        if self._rpt_flow_unit == self._inp_flow_unit:
-            self.flow_unit = self._rpt_flow_unit
+            self.swmm_edges = convert.pandas_edgelist_from_swmm_inp(self.inp)
+            self.swmm_node_attrs = convert.pandas_node_attrs_from_swmm_inp(
+                self.inp)
+
         else:
-            e = "Input file units do not match report file units"
-            raise(ValueError(e))
+            self.flow_unit = None
+
+        if self.swmm_rpt_path is not None:
+            self.rpt = _validate_hymo_rpt(swmm_rpt_path)
+
+            if self.rpt.unit != self.flow_unit:
+                e = "Input file units do not match report file units"
+                raise(ValueError(e))
+
+        if self.proxy_keyword is None:
+            self.proxy_keyword = 'water'
 
         # Need to kick this can for now
-        if self.flow_unit == 'CFS':
+        if (self.flow_unit == 'CFS') or (self.flow_unit is None):
             self.vol_unit = 'acre-ft'
             self._proxy_load_unit = 'lbs'
             self._subcatchment_depth_col = 'Total_Runoff_in'
@@ -114,45 +140,57 @@ class Scenario(object):
             self._node_vol_col = 'Total_Inflow_Volume_mgals'
             self._node_vol_unit = 'mgal'
 
-        else:
+        elif self.flow_unit == 'LPS':  # pragma: no cover
+            # TODO: check these for accuracy, add tests and unit aliases
+            # self.vol_unit = 'liters'
+            # self._proxy_load_unit = 'kg'
+            # self._subcatchment_depth_col = 'Total_Runoff_cm'
+            # self._depth_unit = 'cm'
+            # self._subcatchment_area_col = 'Hectares'
+            # self._area_unit = 'hectare'
+            # self._node_vol_col = 'Total_Inflow_Volume_--'
+            # self._node_vol_unit = '--'
             e = 'Only CFS flow units supported.'
             raise(ValueError(e))
+        else:
+            e = 'Unknown unit system in SWMM files.'
+            raise(ValueError(e))
 
-        self.swmm_edges = convert.pandas_edgelist_from_swmm_inp(self.inp)
-        self.swmm_node_xtype_df = convert.pandas_node_attrs_from_swmm_inp(self.inp).loc[
-            :, ['xtype']]
+        if unit_converter is None:
+            self.unit_converter = UnitConverter()
 
         # Properties
         self._subcatchment_volume = None
         self._node_inflow_volume = None
         self._edges_df = None
-        self._edge_list = None
         self._nodes_df = None
-        self._node_list = None
-        self._check_node_list = None
 
     @property
     def subcatchment_volume(self):
         if self._subcatchment_volume is None:
-            df = (
-
-                self.rpt.subcatchment_runoff_results
-                .pipe(_upper_case_index)
-                .join(self.inp.subcatchments
-                      .pipe(_upper_case_index)
-                      .join(self.swmm_node_xtype_df, how='left')
-                      )
+            subcatchment_runoff_results = (
+                # need to join the runoff depth with the subcatchment area
+                # before converting to volume units.
+                self.rpt.subcatchment_runoff_results.pipe(
+                    _upper_case_column, include_index=True)
+                .join(
+                    self.inp.subcatchments.pipe(
+                        _upper_case_column, include_index=True),
+                    how='left')
             )
+
             self._subcatchment_volume = (
                 load_rpt_subcatchment_vol(
-                    df,
+                    subcatchment_runoff_results,
                     self._subcatchment_area_col,
                     self._area_unit,
                     self._subcatchment_depth_col,
                     self._depth_unit,
                     self.vol_unit,
+                    self.unit_converter,
                 )
             )
+
         return self._subcatchment_volume
 
     @property
@@ -164,10 +202,10 @@ class Scenario(object):
                     self._node_vol_col,
                     self._node_vol_unit,
                     self.vol_unit,
+                    self.unit_converter,
                 )
-                .join(self.swmm_node_xtype_df, how='left')
-
             )
+
         return self._node_inflow_volume
 
     @property
@@ -177,48 +215,54 @@ class Scenario(object):
         """
 
         if self._edges_df is None:
-
             edges = (
                 self.swmm_edges
                 .query("xtype != 'dt'")
                 .set_index('id')
-                .join(
-                    load_rpt_link_flows(
-                        self.rpt.link_pollutant_load_results,
-                        self.proxy_keyword,
-                        self.proxy_pollutant_conc,
-                        self.proxy_conc_unit,
-                        self.vol_unit,
-                    ),
-                    how='left',
-                )
             )
-
-            proxy_edges = (
+            subcatchment_edges = (
                 self.swmm_edges
                 .query("xtype == 'dt'")
                 .set_index('id')
-                .join(
-                    self.subcatchment_volume.loc[:, ['volume', 'unit']]
-                    .assign(id=lambda df: df.index.map(lambda s: '^' + s))
-                    .set_index('id'), how='left',
-                )
             )
 
+            if self.swmm_rpt_path is not None:
+
+                standard_links_df = load_rpt_link_flows(
+                    self.rpt.link_pollutant_load_results,
+                    self.proxy_keyword,
+                    self.proxy_pollutant_conc,
+                    self.proxy_conc_unit,
+                    self.vol_unit,
+                    self.unit_converter,
+                )
+
+                edges = edges.join(standard_links_df, how='left')
+
+                subcatchment_links_df = (
+                    self.subcatchment_volume
+                    .reindex(columns=['volume', 'unit'])
+                    .assign(id=lambda df: df.index.map(lambda s: '^' + s))
+                    .set_index('id')
+                )
+
+                subcatchment_edges = (
+                    subcatchment_edges
+                    .join(subcatchment_links_df, how='left')
+                )
+
             self._edges_df = (
-                pandas.concat([edges, proxy_edges])
+                pandas.concat([edges, subcatchment_edges])
                 .fillna(0)
-                .loc[:, ['inlet_node', 'outlet_node', 'xtype', 'volume', 'unit']]
+                .reindex(columns=['inlet_node', 'outlet_node', 'xtype', 'volume', 'unit'])
             )
 
         return self._edges_df
 
     @property
     def edge_list(self):
-        if self._edge_list is None:
-            self._edge_list = convert.pandas_edgelist_to_edgelist(
-                self.edges_df.reset_index(), source='inlet_node', target='outlet_node')
-        return self._edge_list
+        return convert.pandas_edgelist_to_edgelist(
+            self.edges_df.reset_index(), source='inlet_node', target='outlet_node')
 
     @property
     def nodes_df(self):
@@ -227,157 +271,135 @@ class Scenario(object):
         """
         if self._nodes_df is None:
 
-            self._nodes_df = (
-                pandas.concat([
-                    self.subcatchment_volume.loc[
-                        :, ['xtype',   'volume', 'unit']],
-                    self.node_inflow_volume.loc[
-                        :, ['xtype',  'volume',  'unit']]
-                ])
-                .fillna(0)
-                .rename_axis('id')
+            nodes_inp = self.swmm_node_attrs.reindex(columns=['xtype'])
 
-            )
+            if self.swmm_rpt_path is not None:
+
+                nodes_inp = (
+                    nodes_inp.join(
+                        pandas.concat([
+                            self.subcatchment_volume.reindex(
+                                columns=['volume', 'unit']),
+                            self.node_inflow_volume.reindex(
+                                columns=['volume', 'unit'])
+                        ])
+                        .fillna(0)
+                        .rename_axis('id'),
+                        how='left'
+                    )
+                )
+            self._nodes_df = nodes_inp
+
         return self._nodes_df
 
     @property
     def node_list(self):
-        if self._node_list is None:
-            subs = (
-                self.nodes_df
-                .query('xtype == "subcatchment"')
-                .to_dict('index')
-            )
 
-            self._node_list = list(subs.items())
-
-        return self._node_list
+        return convert.pandas_nodelist_to_nodelist(
+            self.nodes_df.query('xtype == "subcatchment"')
+        )
 
     @property
     def check_node_list(self):
-        if self._check_node_list is None:
-            nodes = (
-                self.nodes_df
-                .query('xtype != "subcatchment"')
-                .rename(columns={'volume': '_ck_volume'})
-                .to_dict('index')
-            )
 
-            self._check_node_list = list(nodes.items())
-
-        return self._check_node_list
+        return convert.pandas_nodelist_to_nodelist(
+            self.nodes_df.query('xtype != "subcatchment"')
+            .rename(columns={'volume': '_ck_volume'})
+        )
 
     @property
     def plot_positions(self):
-        return convert.inp_layout(self.inp)
+        return convert.swmm_inp_layout_to_pos(self.inp)
 
 
-class ScenarioLoading(object):
+class Scenario(ScenarioBase):
 
-    def __init__(self, nodes_df, edges_df, load=None, conc=None, pocs='all',
-                 wq_value_col=None, subcatchment_col='subcatchment',
-                 pollutant_col='pollutant', wq_unit_col='unit', xtype_col='xtype',
-                 volume_val_col='volume', vol_unit_col='unit',
-                 inlet_col='inlet_node', outlet_col='outlet_node'):
-        """
-        Parameters
-        ----------
-        nodes_df : pandas.DataFrame
-            contains 'xtype_col', 'volume_val_col', 'vol_unit_col',
-            and an 'index' containing the node names.
-        edges_df : pandas.DataFrame
-            contains 'xtype_col', 'volume_val_col', 'vol_unit_col',
-            'inlet_col', 'outlet_col', and an index containing the link names.
-        load: pandas.DataFrame, optional (default=None)
-            containing 'wq_value_col', 'subcatchment_col', 'pollutant_col',
-            and 'wq_unit_col'.
-        conc: pandas.DataFrame, optional (default=None)
-            containing 'wq_value_col', 'subcatchment_col', 'pollutant_col',
-            and 'wq_unit_col'.
-        pocs: list like or string, optional (default='all')
-            names of the pollutants of concern.
-        wq_value_col: string, optional (default=None)
-            column that contains the wq values in load/conc.
-        subcatchment_col: string, optional (default='subcatchment')
-            column that contains the subcatchment names in load/conc.
-        pollutant_col: string, optional (default='pollutant')
-            column that contains the pollutant names in load/conc.
-        wq_unit_col: string, optional (default='unit')
-            column that contains the units of pollutants in load/conc.
-        xtype_col: string, optional (default='xtype')
-            column that contains the node/link type in the nodes_df/edges_df.
-        volume_val_col: string, optional (default='volume')
-            column that contains the volume values in the nodes_df/edges_df.
-        vol_unit_col: string, optional (default='unit')
-            column that contains the volume units in the nodes_df/edges_df.
-        inlet_col: string, optional (default='inlet_node')
-            column that contains the inlet in edges_df.
-        outlet_col: string, optional (default='outlet_node')
-            column that contains the outlet in edges_df.
+    def __init__(self,
+                 swmm_inp_path=None,
+                 swmm_rpt_path=None,
+                 proxy_keyword=None,
+                 unit_converter=None,
+                 load_df=None,
+                 concentration_df=None,
+                 pollutant_value_col=None,
+                 node_name_col=None,  # 'subcatchemnt'
+                 pocs=None,  # 'all'
+                 pollutant_name_col=None,  # 'pollutant',
+                 pollutant_unit_col=None,  # 'unit',
+                 ):
 
-        """
+        ScenarioBase.__init__(self, swmm_inp_path,
+                              swmm_rpt_path, proxy_keyword, unit_converter)
 
-        if (load is not None) and (conc is not None):
-            # If a loading is given we need to know if it is
-            # a load or concentration.
-            e = 'Please specify only load or concentration, not both.'
+        if load_df is not None and concentration_df is not None:
+            # Can't load as both concentration and as load
+            e = 'Please specify either load or concentration, not both.'
             raise ValueError(e)
 
-        self._wq_value_col = wq_value_col
-        self._subcatchment_col = subcatchment_col
-        self._pollutant_col = pollutant_col
-        self._wq_unit_col = wq_unit_col
-        self._xtype_col = xtype_col
-        self._volume_val_col = volume_val_col
-        self._vol_unit_col = vol_unit_col
-        self._inlet_col = inlet_col
-        self._outlet_col = outlet_col
+        elif (load_df is not None or concentration_df is not None) and pollutant_value_col is None:
+            e = ('Please specify which column in the pollutant dataframe is '
+                 'contains the values of either concentration of load.'
+                 )
+            raise ValueError(e)
 
-        self.raw_nodes_vol = nodes_df
-        self.raw_edges_vol = edges_df
+        self.raw_load_df = load_df
+        self.raw_concentration_df = concentration_df
+        self.pollutant_value_col = pollutant_value_col
 
-        self._nodes_vol = None
-        self._edges_vol = None
+        self._node_name_col = node_name_col
+        if self._node_name_col is None:
+            self._node_name_col = 'subcatchment'
 
-        # import loading
-        self.pocs = pocs
-        self.raw_load = load
-        self.raw_concentration = conc
+        self._pocs = pocs
+        if self._pocs is None:
+            self._pocs = 'all'
+
+        self._pollutant_name_col = pollutant_name_col
+        if self._pollutant_name_col is None:
+            self._pollutant_name_col = 'pollutant'
+
+        self._pollutant_unit_col = pollutant_unit_col
+        if self._pollutant_unit_col is None:
+            self._pollutant_unit_col = 'unit'
+
         self._concentration = None
         self._load = None
+        self._wide_load = None
 
-        if self.raw_load is not None:
-            if self.pocs in ['all', ['all'], None]:
+        # initialize
+        if self.raw_load_df is not None:
+            if self._pocs in ['all', ['all'], None]:
                 self.pocs = (
-                    self.raw_load
-                    .loc[:, self._pollutant_col]
+                    self.raw_load_df
+                    .loc[:, self._pollutant_name_col]
                     .unique()
                     .tolist()
                 )
-            # initialize
+
             self.load
+            self.wide_load
 
-        elif self.raw_concentration is not None:
-            if self.pocs in ['all', ['all'], None]:
+        elif self.raw_concentration_df is not None:
+            if self._pocs in ['all', ['all'], None]:
                 self.pocs = (
-                    self.raw_concentration
-                    .loc[:, self._pollutant_col]
+                    self.raw_concentration_df
+                    .loc[:, self._pollutant_name_col]
                     .unique()
                     .tolist()
                 )
-            # initialize
             self.concentration
-
-        # self.check_units()
+            self.load
+            self.wide_load
+            self.check_units()
 
     def check_units(self):
         load_units = [_.split('/')[-1]
-                      for _ in self.load.dropna().unit.unique()]
-        vol_units = (self.nodes_vol.unit.unique().tolist() +
-                     self.edges_vol.unit.unique().tolist())
+                      for _ in self.load.unit.dropna().unique()]
+        vol_units = (self.nodes_df.unit.unique().tolist() +
+                     self.edges_df.unit.unique().tolist())
 
         unique_load_units = (
-            self.load.dropna()
+            self.load
             .drop_duplicates(subset=['pollutant', 'unit'])
             .groupby('pollutant')
             .count()
@@ -400,81 +422,55 @@ class ScenarioLoading(object):
         else:
             pass
 
-    # these are here if we need to do something with the vol in the future
-    @property
-    def nodes_vol(self):
-        if self._nodes_vol is None:
-            self._nodes_vol = (
-                self.raw_nodes_vol
-                .rename(columns={
-                    self._xtype_col: 'xtype',
-                    self._volume_val_col: 'volume',
-                    self._vol_unit_col: 'unit'
-                })
-            )
-        return self._nodes_vol
-
-    # these are here if we need to do something with the vol in the future
-    @property
-    def edges_vol(self):
-        if self._edges_vol is None:
-            self._edges_vol = (
-                self.raw_edges_vol
-                .rename(columns={
-                    self._xtype_col: 'xtype',
-                    self._volume_val_col: 'volume',
-                    self._vol_unit_col: 'unit',
-                    self._inlet_col: 'inlet_node',
-                    self._outlet_col: 'outlet_node'
-                })
-            )
-        return self._edges_vol
-
     # tidy vs wide data not hymo
     def calculate_loading(self):
         if self._load is None:
             self._load = (
                 self.concentration
-                .join(self.nodes_vol, on='subcatchment',
+                .join(self.nodes_df, on='subcatchment',
                       how='outer', lsuffix='', rsuffix='_vol')
                 .assign(load=lambda df: df.concentration * df.volume)
+                .assign(unit_load=lambda df: df.unit + "*" + df.unit_vol)
             )
+
         elif self._concentration is None:
             self._concentration = (
                 self.load
-                .join(self.nodes_vol, on='subcatchment',
+                .join(self.nodes_df, on='subcatchment',
                       how='outer', lsuffix='', rsuffix='_vol')
                 .assign(concentration=lambda df: df.load / df.volume)
+                .assign(unit_conc=lambda df: df.unit + "/" + df.unit_vol)
             )
 
     @property
     def load(self):
         if self._load is None:
             load = (
-                self.raw_load
-                .pipe(_upper_case_column, self._subcatchment_col)
+                self.raw_load_df
+                .pipe(_upper_case_column, cols=self._node_name_col)
                 .rename(columns={
-                    self._wq_value_col: 'load',
-                    self._subcatchment_col: 'subcatchment',
-                    self._pollutant_col: 'pollutant',
-                    self._wq_unit_col: 'unit'})
+                    self.pollutant_value_col: 'load',
+                    self._node_name_col: 'subcatchment',
+                    self._pollutant_name_col: 'pollutant',
+                    self._pollutant_unit_col: 'unit'})
                 .query('pollutant in @self.pocs')
             )
             self._load = load
             self.calculate_loading()
+
         return self._load
 
     @property
     def concentration(self):
         if self._concentration is None:
             concentration = (
-                self.raw_concentration
-                .pipe(_upper_case_column, self._subcatchment_col)
+                self.raw_concentration_df
+                .pipe(_upper_case_column, cols=self._node_name_col)
                 .rename(columns={
-                    self._wq_value_col: 'concentration',
-                    self._subcatchment_col: 'subcatchment',
-                    self._pollutant_col: 'pollutant',
-                    self._wq_unit_col: 'unit'})
+                    self.pollutant_value_col: 'concentration',
+                    self._node_name_col: 'subcatchment',
+                    self._pollutant_name_col: 'pollutant',
+                    self._pollutant_unit_col: 'unit'})
                 .query('pollutant in @self.pocs')
             )
             self._concentration = concentration
@@ -482,400 +478,327 @@ class ScenarioLoading(object):
         return self._concentration
 
     @property
+    def wide_load(self):
+        if self._wide_load is None:
+            load = (
+                self.load
+                .loc[:, ['subcatchment', 'pollutant', 'xtype',
+                         'volume', 'unit_vol', 'load']]
+                .set_index(['subcatchment', 'pollutant',
+                            'xtype', 'volume', 'unit_vol'])
+                .unstack('pollutant')
+                .fillna(0)
+                .loc[:, 'load']
+                .loc[:, self.pocs]
+                .reset_index()
+                .set_index('subcatchment')
+            )
+            self._wide_load = load
+        return self._wide_load
+
+    @property
     def edge_list(self):
-        edges = self.edges_vol.copy()
-        edges.index = edges.index.set_names('id')
+
         edges = (
-            edges
+            self.edges_df
             .reset_index()
-            .fillna(0)
-            .set_index(['inlet_node', 'outlet_node'])
-            .loc[:, ['id', 'xtype', 'volume']]
+            .rename(columns={'unit': 'unit_vol'})
         )
-        edge_list = []
-        for dtype in edges.xtype.unique():
-            _list = edges.query('xtype == @dtype').to_dict('index')
-            edge_list.extend(list((str(k[0]), str(k[1]), v)
-                                  for k, v in _list.items()))
-        return edge_list
+
+        return convert.pandas_edgelist_to_edgelist(
+            edges, source='inlet_node', target='outlet_node')
 
     @property
     def node_list(self):
-        node = (
-            self.load
-            .query('xtype == "subcatchment"')
-            .drop('unit', axis='columns')
-            .loc[:, ['subcatchment', 'pollutant', 'xtype',
-                     'volume', 'unit_vol', 'load']]
-            .set_index(['subcatchment', 'pollutant',
-                        'xtype', 'volume', 'unit_vol'])
-            .unstack('pollutant')
-            .fillna(0)
-            .loc[:, 'load']
-            .loc[:, self.pocs]
-            .reset_index()
-            .set_index('subcatchment')
-            .to_dict('index')
-        )
 
-        return list(node.items())
+        if self._wide_load is None:
+            nodelist = self.nodes_df
+        else:
+            nodelist = self.wide_load
+
+        return convert.pandas_nodelist_to_nodelist(
+            nodelist
+            .query('xtype == "subcatchment"')
+        )
 
     @property
     def check_node_list(self):
-        node = (
-            self.load
+
+        if self._wide_load is None:
+            checknodelist = self.nodes_df
+        else:
+            checknodelist = self.wide_load
+
+        return convert.pandas_nodelist_to_nodelist(
+            checknodelist
             .query('xtype != "subcatchment"')
-            .drop('unit', axis='columns')
-            .loc[:, ['subcatchment',  'xtype',
-                     'volume', 'unit_vol', ]]
-            .fillna(0)
-            .rename(columns={'volume': "_ck_volume"})
-            .set_index('subcatchment')
-            .to_dict('index')
+            .rename(columns={'volume': '_ck_volume'})
         )
 
-        return list(node.items())
 
-### ------- Exile -------- ###
+# class ScenarioLoading(object):
 
-
-# class ScenarioHydro(object):
-
-#     def __init__(self, swmm_inp_path, swmm_rpt_path, proxycol='Pollutant_lbs',
-#                  vol_units_output=None, converters=None):
+#     def __init__(self, nodes_df, edges_df, load=None, conc=None,
+#                  pocs='all', wq_value_col=None, subcatchment_col='subcatchment',
+#                  pollutant_col='pollutant', wq_unit_col='unit', xtype_col='xtype',
+#                  volume_val_col='volume', vol_unit_col='unit',
+#                  inlet_col='inlet_node', outlet_col='outlet_node'):
 #         """
 #         Parameters
 #         ----------
-#         inp : string
-#             SWMM5.1 input filepath
-#         rpt : string
-#             SWMM5.1 status report filepath
-#         proxycol : string, optional (default='Pollutant_lbs')
-#         vol_units_output : string, optional (default=None)
-#             specify desired output units for volume. Default is `None`
-#             which will produce output in the same units as the SWMM5.1 files.
-#         converters : tuple or list of tuples, optional (default=None)
-#             specify list of tuples ordered 'from', 'to', 'factor', like
-#             [("mgal", "acre-ft", 1 / 0.325851),]. each conversion is
-#             performed as follows: from * factor = to
+#         nodes_df : pandas.DataFrame
+#             contains 'xtype_col', 'volume_val_col', 'vol_unit_col',
+#             and an 'index' containing the node names.
+#         edges_df : pandas.DataFrame
+#             contains 'xtype_col', 'volume_val_col', 'vol_unit_col',
+#             'inlet_col', 'outlet_col', and an index containing the link names.
+#         load: pandas.DataFrame, optional (default=None)
+#             containing 'wq_value_col', 'subcatchment_col', 'pollutant_col',
+#             and 'wq_unit_col'.
+#         conc: pandas.DataFrame, optional (default=None)
+#             containing 'wq_value_col', 'subcatchment_col', 'pollutant_col',
+#             and 'wq_unit_col'.
+#         pocs: list like or string, optional (default='all')
+#             names of the pollutants of concern (POCs).
+#         wq_value_col: string, optional (default=None)
+#             column that contains the wq values in load/conc.
+#         subcatchment_col: string, optional (default='subcatchment')
+#             column that contains the subcatchment names in load/conc.
+#         pollutant_col: string, optional (default='pollutant')
+#             column that contains the pollutant names in load/conc.
+#         wq_unit_col: string, optional (default='unit')
+#             column that contains the units of pollutants in load/conc.
+#         xtype_col: string, optional (default='xtype')
+#             column that contains the node/link type in the nodes_df/edges_df.
+#         volume_val_col: string, optional (default='volume')
+#             column that contains the volume values in the nodes_df/edges_df.
+#         vol_unit_col: string, optional (default='unit')
+#             column that contains the volume units in the nodes_df/edges_df.
+#         inlet_col: string, optional (default='inlet_node')
+#             column that contains the inlet in edges_df.
+#         outlet_col: string, optional (default='outlet_node')
+#             column that contains the outlet in edges_df.
 
-#         Attributes
-#         ----------
-#         allnodes :
-#         alledges :
 #         """
+#         raise Error('This method is deprecated')
 
-#         # import hydrology input files and force uppercase for link references
-#         self.inp = SWMMInpFile(swmm_inp_path)
-#         self.inp_subcatchments = (
-#             self.inp.subcatchments
-#             .pipe(_upper_case_index)
-#             .pipe(_upper_case_column, ['Outlet'])
-#         )
-#         self.inp_polygons = (
-#             self.inp.polygons
-#             .pipe(_upper_case_index)
-#         )
-#         self.inp_weirs = (
-#             self.inp.weirs
-#             .pipe(_upper_case_index)
-#             .pipe(_upper_case_column, ['From_Node', 'To_Node'])
-#         )
-#         self.inp_orifices = (
-#             self.inp.orifices
-#             .pipe(_upper_case_index)
-#             .pipe(_upper_case_column, ['From_Node', 'To_Node'])
-#         )
-#         self.inp_conduits = (
-#             self.inp.conduits
-#             .pipe(_upper_case_index)
-#             .pipe(_upper_case_column, ['Inlet_Node', 'Outlet_Node'])
-#         )
-#         self.inp_outlets = (
-#             self.inp.outlets
-#             .pipe(_upper_case_index)
-#             .pipe(_upper_case_column, ['Inlet_Node', 'Outlet_Node'])
+#         if (load is not None) and (conc is not None):
+#             # If a loading is given we need to know if it is
+#             # a load or concentration.
+#             e = 'Please specify only load or concentration, not both.'
+#             raise ValueError(e)
+
+#         self._wq_value_col = wq_value_col
+#         self._subcatchment_col = subcatchment_col
+#         self._pollutant_col = pollutant_col
+#         self._wq_unit_col = wq_unit_col
+#         self._xtype_col = xtype_col
+#         self._volume_val_col = volume_val_col
+#         self._vol_unit_col = vol_unit_col
+#         self._inlet_col = inlet_col
+#         self._outlet_col = outlet_col
+
+#         self.raw_nodes_vol = nodes_df
+#         self.raw_edges_vol = edges_df
+
+#         self._nodes_vol = None
+#         self._edges_vol = None
+
+#         # import loading
+#         self.pocs = pocs
+#         self.raw_load = load
+#         self.raw_concentration = conc
+#         self._concentration = None
+#         self._load = None
+
+#         if self.raw_load is not None:
+#             if self.pocs in ['all', ['all'], None]:
+#                 self.pocs = (
+#                     self.raw_load
+#                     .loc[:, self._pollutant_col]
+#                     .unique()
+#                     .tolist()
+#                 )
+#             # initialize
+#             self.load
+
+#         elif self.raw_concentration is not None:
+#             if self.pocs in ['all', ['all'], None]:
+#                 self.pocs = (
+#                     self.raw_concentration
+#                     .loc[:, self._pollutant_col]
+#                     .unique()
+#                     .tolist()
+#                 )
+#             # initialize
+#             self.concentration
+
+#         self.check_units()
+
+#     def check_units(self):
+#         load_units = [_.split('/')[-1]
+#                       for _ in self.load.unit.dropna().unique()]
+#         vol_units = (self.nodes_vol.unit.unique().tolist() +
+#                      self.edges_vol.unit.unique().tolist())
+
+#         unique_load_units = (
+#             self.load
+#             .drop_duplicates(subset=['pollutant', 'unit'])
+#             .groupby('pollutant')
+#             .count()
+#             .unit
+#             .max()
 #         )
 
-#         # import hydrology report files and force uppercase for link references
-#         self.rpt = SWMMReportFile(swmm_rpt_path)
-#         self.rpt_link_pollutant_load_results = (
-#             self.rpt.link_pollutant_load_results
-#             .pipe(_upper_case_index)
-#         )
-#         self.rpt_link_flow_results = (
-#             self.rpt.link_flow_results
-#             .pipe(_upper_case_index)
-#         )
-#         self.rpt_subcatchment_runoff_results = (
-#             self.rpt.subcatchment_runoff_results
-#             .pipe(_upper_case_index)
-#         )
-#         self.rpt_node_inflow_results = (
-#             self.rpt.node_inflow_results
-#             .pipe(_upper_case_index)
-#         )
-
-#         self.proxycol = proxycol
-#         self.vol_units_output = vol_units_output
-#         self.converters = converters
-
-#         self._convert = False
-#         if self.vol_units_output is not None:
-#             self._convert = True
-#             if self.converters is None:
-#                 self.converters = KNOWN_CONVERSIONS
-#             elif isinstance(self.converters, tuple):
-#                 self.converters = list(self.converters)
-
-#         self.flow_unit = (
-#             self.rpt.orig_file[self.rpt.find_line_num('Flow Units')]
-#             .split('.')
-#             .pop(-1)
-#             .strip()
-#         )
-
-#         # Need to kick this can for now
-#         if self.flow_unit == 'CFS':
-#             self.subcatchment_volcol = 'Total_Runoff_mgal'
-#             self.subcatchment_depthcol = 'Total_Runoff_in'
-#             self.subcatchment_areacol = 'Area'
-#             self.node_volcol = 'Total_Inflow_Volume_mgals'
-#             self.outfall_volcol = 'Total_Volume_10_6_gal'
-#             self.vol_unit = 'mgal'
-#             self.depth_unit = 'in'
-#             self.area_unit = 'acre'
-#         elif self.flow_unit == 'LPS':
-#             e = 'Only standard units supported.'
-#             raise(ValueError(e))
+#         if len(set(load_units)) > 1:
+#             e = 'Only one load volume unit supported.'
+#             raise ValueError(e)
+#         elif len(set(vol_units)) > 1:
+#             e = 'Only one volume unit supported.'
+#             raise ValueError(e)
+#         elif load_units[0] != vol_units[0]:
+#             e = 'Volume unit from load must match unit of volume.'
+#             raise ValueError(e)
+#         elif unique_load_units > 1:
+#             e = 'Pollutants must have unique units.'
+#             raise ValueError(e)
 #         else:
-#             e = 'Only standard units supported.'
-#             raise(ValueError(e))
+#             pass
 
-#         # import link volume tracking proxy pollutant
-#         self.proxy_conc_unit = self.inp.pollutants.Units.values[0]
-#         self.proxy_pollutant_conc = float(self.inp.pollutants.Crain.values[0])
-
-#         # initialize properties
-#         self._pollutant_to_vol = None
-#         self._intermediate_link_volume = None
-
-#         self._subcatchments = None
-#         self._nodes = None
-
-#         self._catchment_links = None
-#         self._weirs = None
-#         self._outlets = None
-#         self._conduits = None
-#         self._orifices = None
-
-#         self._all_edges = None
-#         self._all_nodes = None
-
-#     def proxy_conc_conversion_factor(self, flowunit, concunit):
-#         ug_to_mg = 1 / 1000
-#         mg_to_lbs = 1 / 453592
-#         l_to_gal = 1 / 3.78541
-#         gal_to_mgal = 1 / 1000000
-
-#         if concunit == 'MG/L':
-#             conc_conversion = 1
-#         elif concunit == 'UG/L':
-#             conc_conversion = ug_to_mg
-#         elif concunit == '#/L':
-#             raise(ValueError)
-
-#         if self.flow_unit == 'CFS':
-#             mgL_to_lbsgal = l_to_gal / mg_to_lbs * conc_conversion
-#             return mgL_to_lbsgal * gal_to_mgal
-#         else:
-#             raise(ValueError)
-
+#     # these are here if we need to do something with the vol in the future
 #     @property
-#     def pollutant_to_vol(self):
-#         if self._pollutant_to_vol is None:
-#             conversion = self.proxy_conc_conversion_factor(
-#                 self.flow_unit, self.proxy_conc_unit)
-#             self._pollutant_to_vol = (conversion / self.proxy_pollutant_conc)
-#         return self._pollutant_to_vol
-
-#     @property
-#     def intermediate_link_volume(self):
-#         if self._intermediate_link_volume is None:
-#             self._intermediate_link_volume = (
-#                 self.rpt_link_pollutant_load_results
-#                 .mul(self.pollutant_to_vol)
-#                 .join(self.rpt_link_flow_results.Type)
-#                 .rename(columns={self.proxycol: 'converted_vol'})
+#     def nodes_vol(self):
+#         if self._nodes_vol is None:
+#             self._nodes_vol = (
+#                 self.raw_nodes_vol
+#                 .rename(columns={
+#                     self._xtype_col: 'xtype',
+#                     self._volume_val_col: 'volume',
+#                     self._vol_unit_col: 'unit'
+#                 })
 #             )
-#         return self._intermediate_link_volume
+#         return self._nodes_vol
 
-#     @staticmethod
-#     def assign_xtype_volcol(df, xtype, volcol):
-#         return df.assign(xtype=xtype).rename(columns={volcol: 'volume'})
-
+#     # these are here if we need to do something with the vol in the future
 #     @property
-#     def subcatchments(self):
-#         if self._subcatchments is None:
-#             subcatchments = (
-#                 self.rpt_subcatchment_runoff_results
-#                 .join(self.inp_subcatchments)
-#                 .assign(volume=lambda df: df[self.subcatchment_areacol].astype(numpy.float64) * df[self.subcatchment_depthcol])
-#                 .assign(unit='acre-in')
-#                 .pipe(convert_units, 'unit', 'volume', *('acre-in', 'mgal', .32585058 / 12))
-#                 .pipe(self.assign_xtype_volcol, 'subcatchments', 'volume')
-#                 .loc[:, ['xtype', 'volume']]
+#     def edges_vol(self):
+#         if self._edges_vol is None:
+#             self._edges_vol = (
+#                 self.raw_edges_vol
+#                 .rename(columns={
+#                     self._xtype_col: 'xtype',
+#                     self._volume_val_col: 'volume',
+#                     self._vol_unit_col: 'unit',
+#                     self._inlet_col: 'inlet_node',
+#                     self._outlet_col: 'outlet_node'
+#                 })
 #             )
-#             self._subcatchments = subcatchments
+#         return self._edges_vol
 
-#         return self._subcatchments
-
-#     @property
-#     def catchment_links(self):
-#         if self._catchment_links is None:
-#             self._catchment_links = (
-#                 self.subcatchments
-#                 .pipe(self.assign_xtype_volcol, 'dt', 'volume')
-#                 .assign(Inlet_Node=lambda df: df.index)
-#                 .assign(id=lambda df: df.index.map(lambda s: '^' + s))
-#                 .join(self.inp_subcatchments)
-#                 .set_index('id')
-#                 .rename(columns={'Outlet': 'Outlet_Node'})
-#                 .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
-#                 .rename(columns=lambda s: s.lower())
+#     # tidy vs wide data not hymo
+#     def calculate_loading(self):
+#         if self._load is None:
+#             self._load = (
+#                 self.concentration
+#                 .join(self.nodes_vol, on='subcatchment',
+#                       how='outer', lsuffix='', rsuffix='_vol')
+#                 .assign(load=lambda df: df.concentration * df.volume)
+#                 # .assign(unit_load=lambda df: df.unit.str + "*" + df.unit_vol.str)
+#             )
+#         elif self._concentration is None:
+#             self._concentration = (
+#                 self.load
+#                 .join(self.nodes_vol, on='subcatchment',
+#                       how='outer', lsuffix='', rsuffix='_vol')
+#                 .assign(concentration=lambda df: df.load / df.volume)
+#                 # .assign(unit_load=lambda df: df.unit.str + "/" + df.unit_vol.str)
 #             )
 
-#         return self._catchment_links
-
 #     @property
-#     def nodes(self):
-#         if self._nodes is None:
-#             # if we want to carry forward the types of nodes, we can fix it
-#             # here.
-#             nodes = (self.rpt_node_inflow_results
-#                      .pipe(self.assign_xtype_volcol, 'nodes', self.node_volcol)
-#                      .loc[:, ['xtype', 'volume']]
-#                      )
-#             self._nodes = nodes
-#         return self._nodes
-
-#     @property
-#     def weirs(self):
-#         if self._weirs is None:
-#             self._weirs = (
-#                 self.inp_weirs
-#                 .loc[:, ['From_Node', 'To_Node']]
-#                 .rename(columns={'From_Node': 'Inlet_Node', 'To_Node': 'Outlet_Node'})
-#                 .join(self.intermediate_link_volume, how='left')
-#                 .pipe(self.assign_xtype_volcol, 'weirs', 'converted_vol')
-#                 .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
-#                 .rename(columns=lambda s: s.lower())
+#     def load(self):
+#         if self._load is None:
+#             load = (
+#                 self.raw_load
+#                 .pipe(_upper_case_column, cols=self._subcatchment_col)
+#                 .rename(columns={
+#                     self._wq_value_col: 'load',
+#                     self._subcatchment_col: 'subcatchment',
+#                     self._pollutant_col: 'pollutant',
+#                     self._wq_unit_col: 'unit'})
+#                 .query('pollutant in @self.pocs')
 #             )
-#         return self._weirs
+#             self._load = load
+#             self.calculate_loading()
+#         return self._load
 
 #     @property
-#     def orifices(self):
-#         if self._orifices is None:
-#             self._orifices = (
-#                 self.inp_orifices
-#                 .loc[:, ['From_Node', 'To_Node']]
-#                 .rename(columns={'From_Node': 'Inlet_Node', 'To_Node': 'Outlet_Node'})
-#                 .join(self.intermediate_link_volume, how='left')
-#                 .pipe(self.assign_xtype_volcol, 'orifices', 'converted_vol')
-#                 .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
-#                 .rename(columns=lambda s: s.lower())
+#     def concentration(self):
+#         if self._concentration is None:
+#             concentration = (
+#                 self.raw_concentration
+#                 .pipe(_upper_case_column, cols=self._subcatchment_col)
+#                 .rename(columns={
+#                     self._wq_value_col: 'concentration',
+#                     self._subcatchment_col: 'subcatchment',
+#                     self._pollutant_col: 'pollutant',
+#                     self._wq_unit_col: 'unit'})
+#                 .query('pollutant in @self.pocs')
 #             )
-#         return self._orifices
+#             self._concentration = concentration
+#             self.calculate_loading()
+#         return self._concentration
 
 #     @property
-#     def outlets(self):
-#         if self._outlets is None:
-#             self._outlets = (
-#                 self.inp_outlets
-#                 .loc[:, ['Inlet_Node', 'Outlet_Node']]
-#                 .join(self.intermediate_link_volume, how='left')
-#                 .pipe(self.assign_xtype_volcol, 'outlets', 'converted_vol')
-#                 .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
-#                 .rename(columns=lambda s: s.lower())
-#             )
-#         return self._outlets
-
-#     @property
-#     def conduits(self):
-#         if self._conduits is None:
-#             self._conduits = (
-#                 self.inp_conduits
-#                 .loc[:, ['Inlet_Node', 'Outlet_Node']]
-#                 .join(self.intermediate_link_volume, how='left')
-#                 .pipe(self.assign_xtype_volcol, 'conduits', 'converted_vol')
-#                 .loc[:, ['Inlet_Node', 'Outlet_Node', 'xtype', 'volume']]
-#                 .rename(columns=lambda s: s.lower())
-#             )
-#         return self._conduits
-
-#     def _convert_volumes(self, df):
-#         if self._convert:
-#             found = False
-#             for from_unit, to_unit, factor in self.converters:
-#                 if from_unit == self.vol_unit and to_unit == self.vol_units_output:
-#                     found = True
-#                     df = convert_units(df, 'unit', 'volume',
-#                                        from_unit, to_unit, factor)
-#             if not found:
-#                 raise ValueError('No conversion found for units '
-#                                  'of {} to {}'.format(self.vol_unit, self.vol_units_output))
-#             return df
-#         else:
-#             return df
-
-#     @property
-#     def all_edges(self):
-#         """
-#         This is a ScenarioLoading endpoint.
-#         """
-#         if self._all_edges is None:
-#             self._all_edges = (
-#                 self.catchment_links
-#                 .append(self.weirs)
-#                 .append(self.outlets)
-#                 .append(self.conduits)
-#                 .append(self.orifices)
-#                 .assign(unit=self.vol_unit)
-#                 .pipe(self._convert_volumes)
-#                 .rename(columns=lambda s: s.lower())
-#                 .assign(outlet_node=lambda df: df.outlet_node.astype(str))
-#                 .assign(inlet_node=lambda df: df.inlet_node.astype(str))
-#             )
-#         return self._all_edges
-
-#     @property
-#     def all_nodes(self):
-#         """
-#         This is a ScenarioLoading endpoint.
-#         """
-#         if self._all_nodes is None:
-#             self._all_nodes = (
-#                 self.subcatchments
-#                 .append(self.nodes)
-#                 .assign(unit=self.vol_unit)
-#                 .pipe(self._convert_volumes)
-#                 .rename(columns=lambda s: s.lower())
-#             )
-#         return self._all_nodes
-
-#     @property
-#     def plot_positions(self):
-#         """
-#         This is a SwmmNetwork plotting endpoint.
-#         """
-#         pos = (
-#             self.inp
-#             .coordinates.astype(float)
-#             .append(
-#                 self.inp_polygons.astype(float)
-#                 .groupby(self.inp_polygons.index)
-#                 .mean())
-#             .T
-#             .to_dict('list')
+#     def edge_list(self):
+#         edges = self.edges_vol.copy()
+#         edges.index = edges.index.set_names('id')
+#         edges = (
+#             edges
+#             .reset_index()
+#             .fillna(0)
+#             .set_index(['inlet_node', 'outlet_node'])
+#             .loc[:, ['id', 'xtype', 'volume']]
 #         )
-#         return pos
+#         edge_list = []
+#         for dtype in edges.xtype.unique():
+#             _list = edges.query('xtype == @dtype').to_dict('index')
+#             edge_list.extend(list((str(k[0]), str(k[1]), v)
+#                                   for k, v in _list.items()))
+#         return edge_list
+
+#     @property
+#     def node_list(self):
+#         node = (
+#             self.load
+#             .query('xtype == "subcatchment"')
+#             .drop('unit', axis='columns')
+#             .loc[:, ['subcatchment', 'pollutant', 'xtype',
+#                      'volume', 'unit_vol', 'load']]
+#             .set_index(['subcatchment', 'pollutant',
+#                         'xtype', 'volume', 'unit_vol'])
+#             .unstack('pollutant')
+#             .fillna(0)
+#             .loc[:, 'load']
+#             .loc[:, self.pocs]
+#             .reset_index()
+#             .set_index('subcatchment')
+#             .to_dict('index')
+#         )
+
+#         return list(node.items())
+
+#     @property
+#     def check_node_list(self):
+#         node = (
+#             self.load
+#             .query('xtype != "subcatchment"')
+#             .drop('unit', axis='columns')
+#             .loc[:, ['subcatchment',  'xtype',
+#                      'volume', 'unit_vol', ]]
+#             .fillna(0)
+#             .rename(columns={'volume': "_ck_volume"})
+#             .set_index('subcatchment')
+#             .to_dict('index')
+#         )
+
+#         return list(node.items())
