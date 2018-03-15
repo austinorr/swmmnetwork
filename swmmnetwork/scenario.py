@@ -288,6 +288,21 @@ class ScenarioBase(object):
                         how='left'
                     )
                 )
+
+                missing_report_node_records = nodes_inp[
+                    nodes_inp.volume.isnull()].reset_index().to_dict(orient='records')
+
+                if len(missing_report_node_records) > 0:
+                    e = (
+                        "SWMM Report file is missing nodes. "
+                        "Review 'Subcatchment Runoff Results' and 'Node Inflow "
+                        "Results' for the following nodes:\n"
+                        "{}".format("\n".join(["Node xtype: {:12}  Node name: {:}".format(
+                            i['xtype'], i['Name']) for i in missing_report_node_records])
+                        )
+                    )
+                    raise ValueError(e)
+
             self._nodes_df = nodes_inp
 
         return self._nodes_df
@@ -391,6 +406,9 @@ class Scenario(ScenarioBase):
             self.load
             self.wide_load
             self.check_units()
+
+    def check_missing_subcatchments(self):
+        pass
 
     def check_units(self):
         load_units = [_.split('/')[-1]
