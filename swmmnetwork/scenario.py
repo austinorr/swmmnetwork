@@ -411,6 +411,7 @@ class Scenario(ScenarioBase):
             e = 'Only one load volume unit supported.'
             raise ValueError(e)
         elif len(set(vol_units)) > 1:
+            #TODO make this fail so that we see missing subcatchments
             e = 'Only one volume unit supported.'
             raise ValueError(e)
         elif load_units[0] != vol_units[0]:

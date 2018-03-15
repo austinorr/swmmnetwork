@@ -50,15 +50,19 @@ def _sum_edge_attr(G, node, attr, method='edges', filter_key=None, split_on='-',
 
     includes = edges
     if include_filter_flags is not None:
-        includes = [edge for edge in edges
-                    if any([i in str(edge[2][filter_key]).split(split_on)
-                            for i in include_filter_flags])]
+        includes = [
+            edge for edge in edges
+            if any([
+                i in str(edge[2][filter_key]).split(split_on)
+                for i in include_filter_flags])]
 
     excludes = []
     if exclude_filter_flags is not None:
-        excludes = [edge for edge in edges
-                    if any([i in str(edge[2][filter_key]).split(split_on)
-                            for i in exclude_filter_flags])]
+        excludes = [
+            edge for edge in edges
+            if any([
+                i in str(edge[2][filter_key]).split(split_on)
+                for i in exclude_filter_flags])]
 
     edges = [i for i in includes if i not in excludes]
 
@@ -185,16 +189,13 @@ def solve_node(G, node_name, edge_name_col='id', split_on='-',
     node_obj[vol_eff_col] = vol_eff
 
     node_obj[vol_red_col] = vol_reduced
-    node_obj[pct_vol_red_col] = 100 * \
-        _safe_divide(vol_reduced, vol_in)
+    node_obj[pct_vol_red_col] = 100 * _safe_divide(vol_reduced, vol_in)
 
     node_obj[vol_tmnt_col] = vol_treated
-    node_obj[pct_vol_tmnt_col] = 100 * \
-        _safe_divide(vol_treated, vol_in)
+    node_obj[pct_vol_tmnt_col] = 100 * _safe_divide(vol_treated, vol_in)
 
     node_obj[vol_cap_col] = vol_captured
-    node_obj[pct_vol_cap_col] = 100 * \
-        _safe_divide(vol_captured, vol_in)
+    node_obj[pct_vol_cap_col] = 100 * _safe_divide(vol_captured, vol_in)
 
     #-----solve volume weighted loads-----#
     for load_col in load_cols:
