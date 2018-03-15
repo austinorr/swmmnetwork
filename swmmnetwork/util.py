@@ -1,5 +1,6 @@
 
 import pandas
+import numpy
 
 import networkx as nx
 
@@ -109,3 +110,29 @@ def _to_list(val):
         raise TypeError('Pass {} as a list.'.format(val))
 
     return val
+
+
+def sigfigs(x, n=None):
+    if n is None:
+        return x
+    if isinstance(x, (int, float, numpy.number)):
+        rnd = n - numpy.floor(numpy.log10(numpy.abs(x)) if x != 0 else 0) - 1
+        return numpy.around(x, int(rnd))
+    if isinstance(x, list):
+        return [sigfigs(i, n) for i in x]
+    if isinstance(x, numpy.ndarray):
+        tmp = numpy.floor(numpy.log10(numpy.abs(x), where=(x != 0)))
+        tmp[~numpy.isfinite(tmp)] = 0
+        rnd = n - tmp - 1
+        return numpy.array(list(map(numpy.around, x, rnd.astype(int))))
+    if isinstance(x, pandas.Series):
+        return pandas.Series(data=sigfigs(x.values, n), index=x.index, name=x.name)
+    if isinstance(x, pandas.DataFrame):
+        out = []
+        nums = x.select_dtypes(include=numpy.number).copy()
+        others = x.select_dtypes(exclude=numpy.number).copy()
+        for c in nums:
+            out.append(sigfigs(nums[c], n))
+        out.append(others)
+        df = pandas.concat(out, axis=1)
+        return df.reindex(x.columns, axis=1)

@@ -4,7 +4,7 @@
 
 __author__ = 'Austin Orr'
 __email__ = 'austinmartinorr@gmail.com'
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 from .swmmnetwork import SwmmNetwork
 from .convert import (

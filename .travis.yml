@@ -43,15 +43,14 @@ before_install:
   - chmod +x miniconda.sh
   - ./miniconda.sh -b -p $HOME/miniconda
   - export PATH="$HOME/miniconda/bin:$PATH"
-  - conda update --yes conda
-  - conda install --yes nomkl
+  - conda update --yes --quiet conda
 
 # We just set up a conda environment with the right Python version.
 # This should not need changing.
 install:
-  - conda create --yes -n test python=$TRAVIS_PYTHON_VERSION numpy pandas
+  - conda create --yes --quiet -n test python=$TRAVIS_PYTHON_VERSION nomkl numpy pandas
   - source activate test
-  - conda install --yes --channel=conda-forge ${TESTERS} ${NXVERSION}
+  - conda install --yes --quiet --channel conda-forge ${TESTERS} ${NXVERSION}
   - pip install codecov pint==0.8.1
   - pip install git+https://github.com/lucashtnguyen/hymo.git
   - pip install .
