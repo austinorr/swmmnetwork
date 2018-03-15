@@ -49,9 +49,9 @@ before_install:
 # We just set up a conda environment with the right Python version.
 # This should not need changing.
 install:
-  - conda create --yes -n test python=$TRAVIS_PYTHON_VERSION numpy pandas
+  - conda create --yes -n test python=$TRAVIS_PYTHON_VERSION nomkl numpy pandas
   - source activate test
-  - conda install --yes --channel=conda-forge ${TESTERS} ${NXVERSION}
+  - conda install --yes --channel conda-forge ${TESTERS} ${NXVERSION}
   - pip install codecov pint==0.8.1
   - pip install git+https://github.com/lucashtnguyen/hymo.git
   - pip install .
