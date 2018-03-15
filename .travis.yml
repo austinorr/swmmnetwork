@@ -43,7 +43,7 @@ before_install:
   - chmod +x miniconda.sh
   - ./miniconda.sh -b -p $HOME/miniconda
   - export PATH="$HOME/miniconda/bin:$PATH"
-  - conda update --yes conda
+  - conda update --yes --quiet conda
 
 # We just set up a conda environment with the right Python version.
 # This should not need changing.
