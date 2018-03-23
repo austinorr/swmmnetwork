@@ -112,10 +112,10 @@ def pandas_edgelist_to_edgelist(df, source='source', target='target', cols=None)
             cols = [cols]
         edges = edges.loc[:, cols]
     edge_list = []
-    for dtype in edges.xtype.unique():
-        _list = edges.query('xtype == @dtype').to_dict('index')
-        edge_list.extend(list((str(k[0]), str(k[1]), v)
-                              for k, v in _list.items()))
+    for index, row in edges.iterrows():
+        _to, _from = index
+        data = row.to_dict()
+        edge_list.append([_to, _from, data])
     return edge_list
 
 
