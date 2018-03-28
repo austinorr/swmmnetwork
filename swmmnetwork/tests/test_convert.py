@@ -3,7 +3,12 @@ import pytest
 import pandas
 
 from swmmnetwork import SwmmNetwork
-from swmmnetwork.convert import add_edges_from_swmm_inp, network_to_df, from_swmm_inp
+from swmmnetwork.convert import (
+    add_edges_from_swmm_inp,
+    network_to_df,
+    from_swmm_inp,
+    pandas_edgelist_to_edgelist,
+)
 
 from .utils import data_path
 
@@ -57,4 +62,33 @@ def test_equivalent_inp_constructor():
     pandas.testing.assert_frame_equal(df_G1, df_G2)
 
 
-
+def test_pandas_edgelist_to_edgelist():
+    dict_el = [
+        {
+            'source': '0',
+            'target': '1',
+            'xtype': 'conduit',
+            'ident': 'first',
+        },
+        {
+            'source': '0',
+            'target': '1',
+            'xtype': 'conduit',
+            'ident': 'second',
+        },
+        {
+            'source': '0',
+            'target': '1',
+            'xtype': 'weir',
+            'ident': 'third',
+        },
+        {
+            'source': '0',
+            'target': '2',
+            'xtype': 'conduit',
+            'ident': 'fourth',
+        },
+    ]
+    df = pandas.DataFrame(dict_el)
+    el = pandas_edgelist_to_edgelist(df)
+    assert len(el) == len(df) == len(dict_el)

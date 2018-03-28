@@ -390,9 +390,9 @@ class Scenario(ScenarioBase):
                     .unique()
                     .tolist()
                 )
-
             self.load
-            self.wide_load
+            self.concentration
+            self.check_units()
 
         elif self.raw_concentration_df is not None:
             if self._pocs in ['all', ['all'], None]:
@@ -404,15 +404,12 @@ class Scenario(ScenarioBase):
                 )
             self.concentration
             self.load
-            self.wide_load
             self.check_units()
 
-    def check_missing_subcatchments(self):
-        pass
-
     def check_units(self):
-        load_units = [_.split('/')[-1]
-                      for _ in self.load.unit.dropna().unique()]
+
+        conc_units = [_.split('/')[-1]
+                      for _ in self.concentration.unit_conc.dropna().unique()]
         vol_units = (self.nodes_df.unit.unique().tolist() +
                      self.edges_df.unit.unique().tolist())
 
@@ -425,38 +422,35 @@ class Scenario(ScenarioBase):
             .max()
         )
 
-        if len(set(load_units)) > 1:
+        if len(set(conc_units)) > 1:
             e = 'Only one load volume unit supported.'
             raise ValueError(e)
         elif len(set(vol_units)) > 1:
-            # TODO make this fail so that we see missing subcatchments
             e = 'Only one volume unit supported.'
             raise ValueError(e)
-        elif load_units[0] != vol_units[0]:
-            e = 'Volume unit from load must match unit of volume.'
+        elif conc_units[0] != vol_units[0]:
+            e = 'Volume unit from concentration must match unit of volume.'
             raise ValueError(e)
         elif unique_load_units > 1:
-            e = 'Pollutants must have unique units.'
+            e = 'Pollutants of the same name must have the same units.'
             raise ValueError(e)
         else:
             pass
 
     # tidy vs wide data not hymo
     def calculate_loading(self):
-        if self._load is None:
+        if self.raw_load_df is None:
             self._load = (
                 self.concentration
-                .join(self.nodes_df, on='subcatchment',
-                      how='outer', lsuffix='', rsuffix='_vol')
+
                 .assign(load=lambda df: df.concentration * df.volume)
-                .assign(unit_load=lambda df: df.unit + "*" + df.unit_vol)
+                .assign(unit_load=lambda df: df.unit.str.rsplit("/", 1).str[0])
             )
 
-        elif self._concentration is None:
+        elif self.raw_concentration_df is None:
             self._concentration = (
                 self.load
-                .join(self.nodes_df, on='subcatchment',
-                      how='outer', lsuffix='', rsuffix='_vol')
+
                 .assign(concentration=lambda df: df.load / df.volume)
                 .assign(unit_conc=lambda df: df.unit + "/" + df.unit_vol)
             )
@@ -473,6 +467,9 @@ class Scenario(ScenarioBase):
                     self._pollutant_name_col: 'pollutant',
                     self._pollutant_unit_col: 'unit'})
                 .query('pollutant in @self.pocs')
+                .join(self.nodes_df, on='subcatchment',
+                      how='outer', lsuffix='', rsuffix='_vol')
+                .assign(unit_load=lambda df: df.unit)
             )
             self._load = load
             self.calculate_loading()
@@ -491,9 +488,13 @@ class Scenario(ScenarioBase):
                     self._pollutant_name_col: 'pollutant',
                     self._pollutant_unit_col: 'unit'})
                 .query('pollutant in @self.pocs')
+                .join(self.nodes_df, on='subcatchment',
+                      how='outer', lsuffix='', rsuffix='_vol')
+                .assign(unit_conc=lambda df: df.unit)
             )
             self._concentration = concentration
             self.calculate_loading()
+
         return self._concentration
 
     @property

@@ -8,7 +8,8 @@ import pytest
 import pandas as pd
 import pandas.util.testing as pdtest
 
-from swmmnetwork.scenario import Scenario #, ScenarioLoading,
+from swmmnetwork import SwmmNetwork
+from swmmnetwork.scenario import Scenario  # , ScenarioLoading,
 from swmmnetwork.util import _upper_case_column
 from swmmnetwork.scenario import load_rpt_link_flows
 from .utils import data_path
@@ -71,6 +72,8 @@ class TestScenario(object):
                            self.known_rpt_path,
                            proxy_keyword=self.known_proxycol,
                            )
+        self.G = SwmmNetwork(scenario=self.sh)
+        self.G.solve_network()
 
     def teardown(self):
         None
@@ -109,119 +112,23 @@ class TestScenario(object):
         )
 
 
-# class TestScenarioLoading(object):
+def test_load_equals_concentration():
+    inp = data_path('test.inp')
+    rpt = data_path('test.rpt')
+    sub_conc_path = data_path('conc.csv')
+    sub_conc = pd.read_csv(sub_conc_path)
 
-#     def setup(self):
-#         self.known_all_nodes = pd.read_csv(
-#             data_path('all_nodes.csv'), index_col=[0])
-#         self.known_all_edges = pd.read_csv(
-#             data_path('all_edges.csv'), index_col=[0])
-#         self.known_edges_vol = pd.read_csv(
-#             data_path('edges_vol.csv'), index_col=[0])
-#         self.known_conc = pd.read_csv(data_path('conc.csv'))
+    sc = Scenario(inp, rpt, concentration_df=sub_conc,
+                  pollutant_value_col='concentration')
 
-#         self.sl = ScenarioLoading(self.known_all_nodes, self.known_all_edges,
-#                                   conc=self.known_conc, wq_value_col='concentration'
-#                                   )
+    sub_load = (
+        sc.load
+        .query('xtype == "subcatchment"')
+        .assign(unit=lambda df: df.unit.str.split("/").str[0])
+        .reindex(columns=['subcatchment','pollutant','load', 'unit'])
+        .reset_index(drop=True)
+    )
+    sl = Scenario(inp, rpt, load_df=sub_load,
+                  pollutant_value_col='load')
 
-#     def teardown(self):
-#         None
-
-#     def test_attributes(self):
-#         assert hasattr(self.sl, '_wq_value_col')
-#         assert hasattr(self.sl, '_subcatchment_col')
-#         assert hasattr(self.sl, '_pollutant_col')
-#         assert hasattr(self.sl, '_wq_unit_col')
-#         assert hasattr(self.sl, '_xtype_col')
-#         assert hasattr(self.sl, '_volume_val_col')
-#         assert hasattr(self.sl, '_vol_unit_col')
-#         assert hasattr(self.sl, '_inlet_col')
-#         assert hasattr(self.sl, '_outlet_col')
-#         assert hasattr(self.sl, 'raw_nodes_vol')
-#         assert hasattr(self.sl, 'raw_edges_vol')
-#         assert hasattr(self.sl, 'nodes_vol')
-#         assert hasattr(self.sl, 'edges_vol')
-#         assert hasattr(self.sl, 'raw_load')
-#         assert hasattr(self.sl, 'raw_concentration')
-#         assert hasattr(self.sl, 'concentration')
-#         assert hasattr(self.sl, 'load')
-
-#     def test_edges_vol(self):
-#         pdtest.assert_frame_equal(
-#             self.sl.edges_vol,
-#             self.known_edges_vol
-#         )
-
-#     def test_load(self):
-#         # currently the returned df has null values.
-#         # is this right?
-#         None
-
-"""
-class TestScenarioHydro(object):
-
-    def setup(self):
-
-        self.known_inp_path = data_path('test.inp')
-        self.known_rpt_path = data_path('test.rpt')
-        self.known_proxycol = 'water_lbs'
-        self.known_vol_units_output = 'acre-ft'
-
-        self.known_all_nodes = (
-            pd.read_csv(data_path('all_nodes.csv'), index_col=[0])
-            .pipe(_upper_case_index)
-        )
-        self.known_all_edges = (
-            pd.read_csv(data_path('all_edges.csv'), index_col=[0])
-            .pipe(_upper_case_index)
-            .pipe(_upper_case_column, ['inlet_node', 'outlet_node'])
-        )
-
-        self.sh = ScenarioHydro(self.known_inp_path, self.known_rpt_path,
-                                proxycol=self.known_proxycol,
-                                vol_units_output=self.known_vol_units_output)
-
-    def teardown(self):
-        None
-
-    def test_attributes(self):
-        assert hasattr(self.sh, 'inp')
-        assert hasattr(self.sh, 'rpt')
-        assert hasattr(self.sh, 'proxycol')
-        assert hasattr(self.sh, 'vol_units_output')
-        assert hasattr(self.sh, 'converters')
-        assert hasattr(self.sh, 'flow_unit')
-        assert hasattr(self.sh, 'subcatchment_volcol')
-        assert hasattr(self.sh, 'subcatchment_depthcol')
-        assert hasattr(self.sh, 'subcatchment_areacol')
-        assert hasattr(self.sh, 'node_volcol')
-        assert hasattr(self.sh, 'outfall_volcol')
-        assert hasattr(self.sh, 'vol_unit')
-        assert hasattr(self.sh, 'depth_unit')
-        assert hasattr(self.sh, 'area_unit')
-        assert hasattr(self.sh, 'proxy_conc_unit')
-        assert hasattr(self.sh, 'proxy_pollutant_conc')
-        assert hasattr(self.sh, 'pollutant_to_vol')
-        assert hasattr(self.sh, 'intermediate_link_volume')
-        assert hasattr(self.sh, 'subcatchments')
-        assert hasattr(self.sh, 'nodes')
-        assert hasattr(self.sh, 'catchment_links')
-        assert hasattr(self.sh, 'weirs')
-        assert hasattr(self.sh, 'outlets')
-        assert hasattr(self.sh, 'conduits')
-        assert hasattr(self.sh, 'orifices')
-        assert hasattr(self.sh, 'all_edges')
-        assert hasattr(self.sh, 'all_nodes')
-
-    def test_all_nodes(self):
-        pdtest.assert_frame_equal(
-            self.sh.all_nodes,
-            self.known_all_nodes
-        )
-
-    def test_all_edges(self):
-        pdtest.assert_frame_equal(
-            self.sh.all_edges,
-            self.known_all_edges
-        )
-"""
+    pd.testing.assert_frame_equal(sc.wide_load, sl.wide_load)
