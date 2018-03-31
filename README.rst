@@ -59,5 +59,6 @@ then to solve the network:
 	results = G.to_dataframe(index_col='id')
 
 
-
+.. raw:: html
+   :file: docs/img/swmmnetwork.html
 
