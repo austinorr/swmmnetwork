@@ -59,7 +59,5 @@ then to solve the network:
 	results = G.to_dataframe(index_col='id')
 
 
-.. image:: 
-	
-	:file: docs/img/swmmnetwork.gif
+.. image:: docs/img/swmmnetwork.gif
 
