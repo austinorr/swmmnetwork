@@ -60,5 +60,6 @@ then to solve the network:
 
 
 .. raw:: html
+
    :file: docs/img/swmmnetwork.html
 
