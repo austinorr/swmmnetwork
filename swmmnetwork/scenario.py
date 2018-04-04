@@ -392,6 +392,7 @@ class Scenario(ScenarioBase):
                 )
             self.load
             self.concentration
+            self.wide_load
             self.check_units()
 
         elif self.raw_concentration_df is not None:
@@ -404,6 +405,7 @@ class Scenario(ScenarioBase):
                 )
             self.concentration
             self.load
+            self.wide_load
             self.check_units()
 
     def check_units(self):
